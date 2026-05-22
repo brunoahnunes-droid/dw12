@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""Conferidor de Loterias Caixa – entry point."""
+"""
+Conferidor de Loterias Caixa
+  python main.py        → interface gráfica (padrão)
+  python main.py --cli  → terminal interativo
+"""
 import sys
 import os
 
-# Ensure project root is on the path when run directly
 sys.path.insert(0, os.path.dirname(__file__))
 
-from ui.app import run_app
-
-if __name__ == "__main__":
+if "--cli" in sys.argv:
+    from ui.app import run_app
     run_app()
+else:
+    from gui.app import run_gui
+    run_gui()
