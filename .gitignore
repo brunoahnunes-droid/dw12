@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.venv/
+venv/
+
+# Dados gerados pelo app (não versionar apostas pessoais)
+data/jogos.json
+exports/
+
+# Editor / OS
+.vscode/
+.idea/
+*.DS_Store
