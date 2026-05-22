@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Probabilidades · Loterias Caixa{% endblock %}
+{% block page_title %}Probabilidades de Ganhar{% endblock %}
+{% block page_sub %}Cálculo matemático exato por faixa de prêmio{% endblock %}
+
+{% block content %}
+<div class="page-cols">
+  <div>
+    <div class="card">
+      <div class="card-title">Configuração</div>
+      <form method="GET">
+        <div class="form-group">
+          <label class="form-label">Tipo de Jogo</label>
+          <select class="form-control" name="lt" onchange="this.form.submit()">
+            {% for lt_val, lt_label in lt_choices %}
+              <option value="{{ lt_val }}" {% if lt_val == selected_lt %}selected{% endif %}>
+                {{ lt_label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% if not cfg.fixed %}
+        <div class="form-group">
+          <label class="form-label">Números na aposta: <strong id="picks-lbl">{{ n_picks }}</strong></label>
+          <input type="range" class="w-full" name="picks"
+                 min="{{ cfg.min }}" max="{{ cfg.max }}" value="{{ n_picks }}"
+                 id="picks-slider" oninput="syncSlider('picks-slider','picks-lbl')"
+                 style="accent-color:var(--accent); height:6px; cursor:pointer; width:100%;">
+          <div class="flex justify-between text-sm text-muted" style="margin-top:4px;">
+            <span>{{ cfg.min }}</span><span>{{ cfg.max }}</span>
+          </div>
+        </div>
+        {% endif %}
+        <button type="submit" class="btn btn-primary w-full">📊 Calcular</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Resumo</div>
+      <div class="info-row">
+        <span class="key">Chance de ganhar</span>
+        <span class="val gold">{{ overall_pct }}</span>
+      </div>
+      <div class="info-row">
+        <span class="key">1 em X apostas</span>
+        <span class="val">{{ overall_odds }}</span>
+      </div>
+      <div class="info-row">
+        <span class="key">Preço por aposta</span>
+        <span class="val">R$ {{ "%.2f"|format(cfg.price) }}</span>
+      </div>
+      <div class="info-row">
+        <span class="key">Sorteios</span>
+        <span class="val text-sm" style="text-align:right; max-width:160px;">{{ cfg.days }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card" style="padding:0;">
+      <div class="table-wrap" style="border:none; border-radius:var(--radius);">
+        <table>
+          <thead>
+            <tr>
+              <th>Faixa de Prêmio</th>
+              <th>Odds (1 em X)</th>
+              <th>Probabilidade</th>
+              <th>Equivale a...</th>
+              <th>Tipo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            <tr>
+              <td class="{{ 'prize-jackpot' if r.type=='jackpot' else ('prize-fixed' if r.type=='fixed' else 'prize-var') }}">
+                {{ '🏆' if r.type=='jackpot' else ('💵' if r.type=='fixed' else '🥈') }}
+                {{ r.name }}
+              </td>
+              <td class="font-bold">{{ r.odds }}</td>
+              <td class="text-muted text-sm">{{ r.pct }}</td>
+              <td class="text-muted text-sm">{{ r.coin }}</td>
+              <td>
+                <span class="badge {{ 'badge-gold' if r.type=='jackpot' else ('badge-green' if r.type=='fixed' else 'badge-blue') }}">
+                  {{ 'Jackpot' if r.type=='jackpot' else ('Fixo' if r.type=='fixed' else 'Variável') }}
+                </span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Comparação entre jogos -->
+    <div class="card mt-16">
+      <div class="card-title">Comparação de Odds — Jackpot (aposta mínima)</div>
+      <div class="table-wrap" style="border:none;">
+        <table>
+          <thead>
+            <tr><th>Jogo</th><th>Odds Jackpot</th><th>Preço</th></tr>
+          </thead>
+          <tbody>
+            {% for comp in comparison %}
+            <tr {% if comp.lt == selected_lt %}style="background:rgba(245,166,35,.07)"{% endif %}>
+              <td class="col-type">{{ comp.emoji }} {{ comp.name }}</td>
+              <td class="font-bold {% if comp.lt == selected_lt %}text-accent{% endif %}">
+                {{ comp.odds }}
+              </td>
+              <td class="text-muted">R$ {{ "%.2f"|format(comp.price) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

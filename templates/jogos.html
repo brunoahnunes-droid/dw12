@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Meus Jogos · Loterias Caixa{% endblock %}
+{% block page_title %}Meus Jogos{% endblock %}
+{% block page_sub %}{{ tickets|length }} jogo(s) cadastrado(s){% endblock %}
+
+{% block topbar_right %}
+<form method="GET" class="flex gap-8 items-center">
+  <select class="form-control" name="lt" style="width:220px"
+          onchange="this.form.submit()">
+    <option value="">Todos os tipos</option>
+    {% for lt_val, lt_label in lt_choices %}
+      <option value="{{ lt_val }}" {% if lt_val == filter_lt %}selected{% endif %}>
+        {{ lt_label }}
+      </option>
+    {% endfor %}
+  </select>
+</form>
+{% endblock %}
+
+{% block content %}
+{% if tickets %}
+<div class="card" style="padding: 0;">
+  <div class="table-wrap" style="border:none; border-radius: var(--radius);">
+    <table id="tickets-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Jogo</th>
+          <th>Números</th>
+          <th>Extra</th>
+          <th>Rótulo</th>
+          <th>Data</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tickets %}
+        <tr>
+          <td class="col-id">{{ t.id }}</td>
+          <td class="col-type">{{ t.emoji }} {{ t.lt_name }}</td>
+          <td>
+            <div class="balls">
+              {% for n in t.numbers[:15] %}
+                <span class="ball ball-sm ticket">{{ "%02d"|format(n) }}</span>
+              {% endfor %}
+              {% if t.numbers|length > 15 %}
+                <span class="text-muted text-sm">+{{ t.numbers|length - 15 }}</span>
+              {% endif %}
+            </div>
+          </td>
+          <td class="text-muted text-sm">{{ t.extra_display }}</td>
+          <td class="text-muted">{{ t.label or '—' }}</td>
+          <td class="text-muted text-sm">{{ t.created_at }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('remover_jogo') }}"
+                  onsubmit="return confirm('Remover jogo {{ t.id }}?')">
+              <input type="hidden" name="ticket_id" value="{{ t.id }}">
+              <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="flex gap-8 mt-16">
+  <form method="POST" action="{{ url_for('limpar_jogos') }}"
+        onsubmit="return confirm('Remover TODOS os jogos{{ ' de '+filter_lt if filter_lt else '' }}? Não pode ser desfeito.')">
+    {% if filter_lt %}<input type="hidden" name="lt" value="{{ filter_lt }}">{% endif %}
+    <button type="submit" class="btn btn-ghost">
+      🗑️ &nbsp; Limpar {{ 'Filtro' if filter_lt else 'Tudo' }}
+    </button>
+  </form>
+</div>
+
+{% else %}
+<div class="card" style="padding: 60px;">
+  <div class="empty-state">
+    <div class="icon">🎰</div>
+    <p>Nenhum jogo cadastrado.<br>
+      <a href="{{ url_for('gerar') }}" class="text-accent">Gere jogos</a> ou
+      <a href="{{ url_for('adicionar') }}" class="text-accent">adicione manualmente</a>.
+    </p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

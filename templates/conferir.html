@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% block title %}Conferir Sorteio · Loterias Caixa{% endblock %}
+{% block page_title %}Conferir Sorteio{% endblock %}
+{% block page_sub %}Compare seus jogos com os números sorteados{% endblock %}
+
+{% block content %}
+<div class="page-cols-wide">
+  <!-- Formulário -->
+  <div>
+    <div class="card">
+      <div class="card-title">Dados do Sorteio</div>
+      <form method="POST" id="check-form">
+
+        <div class="form-group">
+          <label class="form-label">Tipo de Jogo</label>
+          <select class="form-control" name="lottery_type" onchange="this.form.submit()">
+            {% for lt_val, lt_label in lt_choices %}
+              <option value="{{ lt_val }}" {% if lt_val == selected_lt %}selected{% endif %}>
+                {{ lt_label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Nº do Concurso</label>
+            <input class="form-control" type="text" name="contest"
+                   placeholder="Ex: 2024-001" value="{{ form.contest }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Data</label>
+            <input class="form-control" type="text" name="draw_date"
+                   placeholder="Ex: 22/05/2026" value="{{ form.draw_date }}">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            Números Sorteados
+            <span class="text-muted text-sm">({{ cfg.draw_count }} números, separe por espaço)</span>
+          </label>
+          <input class="form-control" type="text" name="numbers"
+                 placeholder="Ex: 05 12 23 34 45 56" value="{{ form.numbers }}"
+                 style="font-size:16px; font-weight:700; letter-spacing:2px;">
+        </div>
+
+        {% if cfg.has_second_draw %}
+        <div class="form-group">
+          <label class="form-label">2º Sorteio (Dupla-Sena)</label>
+          <input class="form-control" type="text" name="numbers2"
+                 placeholder="Ex: 07 14 21 28 35 42" value="{{ form.numbers2 }}"
+                 style="font-size:16px; font-weight:700; letter-spacing:2px;">
+        </div>
+        {% endif %}
+
+        {% if cfg.extra_name %}
+        <div class="form-group">
+          <label class="form-label">{{ cfg.extra_name }} Sorteado</label>
+          {% if selected_lt == 'Timemania' %}
+            <select class="form-control" name="extra">
+              {% for k, v in teams.items() %}
+                <option value="{{ k }}" {% if form.extra == k|string %}selected{% endif %}>
+                  {{ k }} – {{ v }}
+                </option>
+              {% endfor %}
+            </select>
+          {% elif selected_lt == 'Dia de Sorte' %}
+            <select class="form-control" name="extra">
+              {% for k, v in months.items() %}
+                <option value="{{ k }}" {% if form.extra == k|string %}selected{% endif %}>
+                  {{ "%02d"|format(k) }} – {{ v }}
+                </option>
+              {% endfor %}
+            </select>
+          {% elif selected_lt == '+Milionária' %}
+            <div class="form-row">
+              <div>
+                <label class="form-label text-sm">Trevo 1</label>
+                <select class="form-control" name="trevo1">
+                  {% for i in range(1,7) %}<option>{{ i }}</option>{% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="form-label text-sm">Trevo 2</label>
+                <select class="form-control" name="trevo2">
+                  {% for i in range(1,7) %}
+                    <option {% if i==2 %}selected{% endif %}>{{ i }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <button type="submit" name="action" value="check"
+                class="btn btn-primary btn-lg w-full">
+          🔍 &nbsp; CONFERIR SORTEIO
+        </button>
+      </form>
+    </div>
+
+    {% if results %}
+    <div class="card">
+      <div class="flex gap-8 flex-col">
+        <form method="POST">
+          <input type="hidden" name="action" value="export">
+          <input type="hidden" name="lottery_type"  value="{{ selected_lt }}">
+          <input type="hidden" name="contest"       value="{{ draw.contest_number }}">
+          <input type="hidden" name="draw_date"     value="{{ draw.draw_date }}">
+          <input type="hidden" name="numbers"       value="{{ draw.numbers|join(' ') }}">
+          {% if draw.numbers2 %}
+          <input type="hidden" name="numbers2" value="{{ draw.numbers2|join(' ') }}">
+          {% endif %}
+          {% if draw.extra %}
+          <input type="hidden" name="extra" value="{{ draw.extra }}">
+          {% endif %}
+          <button type="submit" class="btn btn-success w-full">📥 Exportar Excel</button>
+        </form>
+        <form method="POST">
+          <input type="hidden" name="action" value="save_draw">
+          <input type="hidden" name="lottery_type"  value="{{ selected_lt }}">
+          <input type="hidden" name="contest"       value="{{ draw.contest_number }}">
+          <input type="hidden" name="draw_date"     value="{{ draw.draw_date }}">
+          <input type="hidden" name="numbers"       value="{{ draw.numbers|join(' ') }}">
+          {% if draw.numbers2 %}
+          <input type="hidden" name="numbers2" value="{{ draw.numbers2|join(' ') }}">
+          {% endif %}
+          {% if draw.extra %}
+          <input type="hidden" name="extra" value="{{ draw.extra }}">
+          {% endif %}
+          <button type="submit" class="btn btn-ghost w-full">💾 Salvar no Histórico</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Resultados -->
+  <div>
+    {% if results %}
+    <!-- Números sorteados -->
+    <div class="card mb-16">
+      <div class="card-title">Números Sorteados
+        {% if draw.contest_number %}— Concurso {{ draw.contest_number }}{% endif %}
+        {% if draw.draw_date %}— {{ draw.draw_date }}{% endif %}
+      </div>
+      <div class="balls">
+        {% for n in draw.numbers|sort %}
+          <span class="ball drawn">{{ "%02d"|format(n) }}</span>
+        {% endfor %}
+      </div>
+      {% if draw.numbers2 %}
+      <div class="card-title mt-8">2º Sorteio</div>
+      <div class="balls">
+        {% for n in draw.numbers2|sort %}
+          <span class="ball" style="background:var(--info);color:#fff">{{ "%02d"|format(n) }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if draw.extra %}
+      <div class="mt-8">
+        <span class="badge badge-gold">
+          {{ cfg.extra_name }}: {{ extra_display }}
+        </span>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Resumo financeiro -->
+    <div class="grid-4 mb-16">
+      <div class="stat-card">
+        <div class="stat-label">Jogos</div>
+        <div class="stat-value">{{ fin.total }}</div>
+        <div class="stat-sub">conferidos</div>
+      </div>
+      <div class="stat-card {% if fin.winners > 0 %}success{% endif %}">
+        <div class="stat-label">Premiados</div>
+        <div class="stat-value">{{ fin.winners }}</div>
+        <div class="stat-sub">jogos</div>
+      </div>
+      <div class="stat-card danger">
+        <div class="stat-label">Investido</div>
+        <div class="stat-value" style="font-size:22px">R$ {{ "%.2f"|format(fin.spent) }}</div>
+      </div>
+      <div class="stat-card {% if fin.net >= 0 %}success{% else %}{% endif %}">
+        <div class="stat-label">Saldo Líquido</div>
+        <div class="stat-value" style="font-size:20px; color:{{ 'var(--success)' if fin.net >= 0 else 'var(--danger)' }}">
+          R$ {{ "%+.2f"|format(fin.net) }}
+        </div>
+        <div class="stat-sub">ROI: {{ "%.1f"|format(fin.roi) }}%</div>
+      </div>
+    </div>
+
+    {% if fin.var_prizes %}
+    <div class="card mb-16" style="border-color:var(--warn)">
+      <span style="color:var(--warn)">⚠️</span>
+      <strong>Prêmios variáveis ganhos:</strong> {{ fin.var_prizes|join(' · ') }}
+      — consulte a Caixa para o valor exato.
+    </div>
+    {% endif %}
+
+    <!-- Tabela de resultados -->
+    <div class="card" style="padding:0;">
+      <div class="table-wrap" style="border:none; border-radius:var(--radius);">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Rótulo</th>
+              <th>Números (🟢 = acerto)</th>
+              <th>Acertos</th>
+              {% if cfg.extra_name %}<th>{{ cfg.extra_name }}</th>{% endif %}
+              <th>Prêmio</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in results %}
+            <tr class="{{ 'winner' if r.is_winner }}">
+              <td class="col-id">{{ r.id }}</td>
+              <td class="text-muted">{{ r.label or '—' }}</td>
+              <td>
+                <div class="balls">
+                  {% for n in r.numbers %}
+                    <span class="ball ball-sm {{ 'matched' if n in r.matched_set else 'ticket' }}">
+                      {{ "%02d"|format(n) }}
+                    </span>
+                  {% endfor %}
+                </div>
+                {% if r.matches2 is defined and r.matches2 > 0 %}
+                <div class="text-muted text-sm mt-8">2º sorteio: {{ r.matches2 }} acertos</div>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge {{ 'badge-green' if r.matches >= 3 else 'badge-gray' }}">
+                  {{ r.matches }}
+                </span>
+              </td>
+              {% if cfg.extra_name %}
+              <td>
+                {% if r.extra_won %}
+                  <span class="badge badge-green">✅ {{ r.extra_label }}</span>
+                {% else %}
+                  <span class="text-muted text-sm">{{ r.extra_label or '—' }}</span>
+                {% endif %}
+              </td>
+              {% endif %}
+              <td>
+                {% if r.prize %}
+                  <span class="badge {{ 'badge-gold' if r.prize_type=='jackpot' else ('badge-green' if r.prize_type=='fixed' else 'badge-blue') }}">
+                    {{ '🏆' if r.prize_type=='jackpot' else ('💵' if r.prize_type=='fixed' else '🥈') }}
+                    {{ r.prize }}
+                    {% if r.prize_value %}&nbsp;R$ {{ "%.2f"|format(r.prize_value) }}{% endif %}
+                  </span>
+                {% else %}
+                  <span class="text-muted text-sm">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% else %}
+    <div class="card" style="height:400px; display:flex; align-items:center; justify-content:center;">
+      <div class="empty-state">
+        <div class="icon">🔍</div>
+        <p>Insira os números sorteados e clique em<br>
+          <strong>Conferir Sorteio</strong> para ver os resultados.</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

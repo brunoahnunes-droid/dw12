@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Adicionar Jogo · Loterias Caixa{% endblock %}
+{% block page_title %}Adicionar Jogo Manual{% endblock %}
+{% block page_sub %}Clique nos números para selecionar sua aposta{% endblock %}
+
+{% block content %}
+<div class="page-cols-wide">
+  <!-- Controles -->
+  <div>
+    <div class="card">
+      <div class="card-title">Configuração</div>
+      <form method="POST" id="add-form">
+        <div class="form-group">
+          <label class="form-label">Tipo de Jogo</label>
+          <select class="form-control" name="lottery_type"
+                  onchange="this.form.submit()">
+            {% for lt_val, lt_label in lt_choices %}
+              <option value="{{ lt_val }}" {% if lt_val == selected_lt %}selected{% endif %}>
+                {{ lt_label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Counter -->
+        <div id="sel-count" style="font-size:18px; text-align:center; margin: 16px 0; color:var(--muted);">
+          <span class="sel-counter">0</span>
+          <span class="sel-max"> / {{ cfg.min }}{% if cfg.min != cfg.max %}–{{ cfg.max }}{% endif %} selecionados</span>
+        </div>
+
+        <input type="hidden" name="numbers" id="selected-numbers">
+
+        <!-- Extra fields -->
+        {% if cfg.extra_name %}
+        <div class="form-group">
+          <label class="form-label">{{ cfg.extra_name }}</label>
+          {% if selected_lt == 'Timemania' %}
+            <select class="form-control" name="extra">
+              {% for k, v in teams.items() %}
+                <option value="{{ k }}">{{ k }} – {{ v }}</option>
+              {% endfor %}
+            </select>
+          {% elif selected_lt == 'Dia de Sorte' %}
+            <select class="form-control" name="extra">
+              {% for k, v in months.items() %}
+                <option value="{{ k }}">{{ "%02d"|format(k) }} – {{ v }}</option>
+              {% endfor %}
+            </select>
+          {% elif selected_lt == '+Milionária' %}
+            <div class="form-row">
+              <div>
+                <label class="form-label text-sm">Trevo 1</label>
+                <select class="form-control" name="trevo1">
+                  {% for i in range(1,7) %}<option>{{ i }}</option>{% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="form-label text-sm">Trevo 2</label>
+                <select class="form-control" name="trevo2">
+                  {% for i in range(1,7) %}<option value="{{ i }}" {% if i==2 %}selected{% endif %}>{{ i }}</option>{% endfor %}
+                </select>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="form-group">
+          <label class="form-label">Rótulo (opcional)</label>
+          <input class="form-control" type="text" name="label"
+                 placeholder="Ex: Aniversário, Jogo da família...">
+        </div>
+
+        <button type="submit" id="add-btn" name="action" value="add"
+                class="btn btn-primary btn-lg w-full" disabled>
+          ✅ &nbsp; SALVAR JOGO
+        </button>
+      </form>
+
+      {% if cfg.extra_name and selected_lt == 'Lotomania' %}
+      <p class="text-muted text-sm mt-8">
+        Selecione exatamente <strong>50</strong> números de 100.
+      </p>
+      {% endif %}
+    </div>
+
+    <!-- Regras do jogo -->
+    <div class="card">
+      <div class="card-title">Prêmios</div>
+      {% for tier in cfg.prizes %}
+      <div class="info-row">
+        <span class="key">{{ tier.name }}</span>
+        <span class="badge {{ 'badge-gold' if tier.type=='jackpot' else ('badge-green' if tier.type=='fixed' else 'badge-blue') }}">
+          {% if tier.type == 'jackpot' %}🏆 Jackpot
+          {% elif tier.type == 'fixed' %}R$ {{ "%.2f"|format(tier.value) }}
+          {% else %}Variável{% endif %}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Grid de números -->
+  <div class="card" style="padding: 8px;">
+    <div class="card-title" style="padding: 12px 12px 0;">
+      Selecione os números
+      <span class="text-muted text-sm" style="font-weight:400;">
+        — intervalo {{ cfg.lo }}–{{ cfg.hi }}
+      </span>
+    </div>
+    <div id="num-picker-container"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const picker = new NumberPicker('num-picker-container', {
+  lo: {{ cfg.lo }}, hi: {{ cfg.hi }},
+  min: {{ cfg.min }}, max: {{ cfg.max }},
+  color: '{{ cfg.color }}',
+  inputId: 'selected-numbers',
+  counterId: 'sel-count',
+  fixed: {{ 'true' if cfg.fixed else 'false' }},
+});
+</script>
+{% endblock %}

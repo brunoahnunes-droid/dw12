@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Loterias Caixa{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+<!-- Flash messages (consumed by JS toast) -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+    <span class="flash-msg" data-type="{{ cat }}" style="display:none">{{ msg }}</span>
+  {% endfor %}
+{% endwith %}
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <span class="logo-icon">🎰</span>
+    <div class="logo-title">Loterias Caixa</div>
+    <div class="logo-sub">Sistema de Conferência</div>
+  </div>
+
+  <nav class="nav">
+    <div class="nav-section">Principal</div>
+    <a href="{{ url_for('index') }}" class="nav-item {% if active=='index' %}active{% endif %}">
+      <span class="icon">📊</span> Dashboard
+    </a>
+    <a href="{{ url_for('gerar') }}" class="nav-item {% if active=='gerar' %}active{% endif %}">
+      <span class="icon">🎲</span> Gerar Jogos
+    </a>
+    <a href="{{ url_for('adicionar') }}" class="nav-item {% if active=='adicionar' %}active{% endif %}">
+      <span class="icon">➕</span> Adicionar Manual
+    </a>
+
+    <div class="nav-section">Gestão</div>
+    <a href="{{ url_for('jogos') }}" class="nav-item {% if active=='jogos' %}active{% endif %}">
+      <span class="icon">📋</span> Meus Jogos
+      {% if ticket_count > 0 %}
+        <span class="badge-count">{{ ticket_count }}</span>
+      {% endif %}
+    </a>
+    <a href="{{ url_for('conferir') }}" class="nav-item {% if active=='conferir' %}active{% endif %}">
+      <span class="icon">🔍</span> Conferir Sorteio
+    </a>
+
+    <div class="nav-section">Análise</div>
+    <a href="{{ url_for('probabilidades') }}" class="nav-item {% if active=='probabilidades' %}active{% endif %}">
+      <span class="icon">📈</span> Probabilidades
+    </a>
+    <a href="{{ url_for('historico') }}" class="nav-item {% if active=='historico' %}active{% endif %}">
+      <span class="icon">🕐</span> Histórico
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="text-muted text-sm" style="padding: 8px 4px;">
+      v2.0 &nbsp;·&nbsp; 9 loterias suportadas
+    </div>
+  </div>
+</aside>
+
+<!-- Main -->
+<main class="main">
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">{% block page_title %}{% endblock %}</div>
+      <div class="topbar-sub">{% block page_sub %}{% endblock %}</div>
+    </div>
+    <div class="topbar-right">{% block topbar_right %}{% endblock %}</div>
+  </div>
+
+  <div class="content">
+    {% block content %}{% endblock %}
+  </div>
+</main>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

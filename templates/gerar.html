@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Gerar Jogos · Loterias Caixa{% endblock %}
+{% block page_title %}Gerar Jogos{% endblock %}
+{% block page_sub %}Apostas aleatórias com exportação para Excel{% endblock %}
+
+{% block content %}
+<div class="page-cols">
+  <!-- Painel de controles -->
+  <div>
+    <div class="card">
+      <div class="card-title">Configuração</div>
+      <form method="POST" id="gen-form">
+
+        <div class="form-group">
+          <label class="form-label">Tipo de Jogo</label>
+          <select class="form-control" name="lottery_type" id="lt-select"
+                  onchange="this.form.submit()">
+            {% for lt_val, lt_label in lt_choices %}
+              <option value="{{ lt_val }}" {% if lt_val == selected_lt %}selected{% endif %}>
+                {{ lt_label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Info card da loteria -->
+        <div class="card" style="background:var(--elevated); margin: 0 0 16px; padding: 14px 16px;">
+          <div class="flex justify-between mb-16" style="align-items:flex-start;">
+            <div>
+              <div style="font-size:24px; font-weight:800; color:{{ cfg.color }}">
+                {{ cfg.emoji }} {{ cfg.name }}
+              </div>
+              <div class="text-muted text-sm mt-8">{{ cfg.description }}</div>
+            </div>
+          </div>
+          <div class="info-row">
+            <span class="key">Intervalo</span>
+            <span class="val">{{ cfg.lo }}–{{ cfg.hi }}</span>
+          </div>
+          <div class="info-row">
+            <span class="key">Sorteio</span>
+            <span class="val">{{ cfg.draw_count }} números</span>
+          </div>
+          <div class="info-row">
+            <span class="key">Preço base</span>
+            <span class="val text-accent">R$ {{ "%.2f"|format(cfg.price) }}</span>
+          </div>
+          <div class="info-row">
+            <span class="key">Dias</span>
+            <span class="val">{{ cfg.days }}</span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">
+              Números por jogo
+              {% if not cfg.fixed %}({{ cfg.min }}–{{ cfg.max }}){% endif %}
+            </label>
+            {% if cfg.fixed %}
+              <input class="form-control" type="number" name="n_picks"
+                     value="{{ cfg.min }}" readonly style="opacity:.6">
+            {% else %}
+              <input class="form-control" type="number" name="n_picks"
+                     id="n-picks" min="{{ cfg.min }}" max="{{ cfg.max }}"
+                     value="{{ n_picks }}"
+                     oninput="updateCost('{{ cfg.price }}')">
+            {% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label">Quantidade de jogos</label>
+            <input class="form-control" type="number" name="n_games" id="n-games"
+                   min="1" max="500" value="{{ n_games }}"
+                   oninput="updateCost('{{ cfg.price }}')">
+          </div>
+        </div>
+
+        <div id="cost-preview" class="text-accent font-bold" style="font-size:15px; margin-bottom:14px;">
+          💰 Investimento: R$ {{ "%.2f"|format(cfg.price * n_games) }}
+        </div>
+
+        <button type="submit" name="action" value="generate" class="btn btn-primary w-full btn-lg">
+          🎲 &nbsp; GERAR JOGOS
+        </button>
+      </form>
+
+      {% if generated %}
+      <hr class="divider">
+      <form method="POST">
+        <input type="hidden" name="n_picks"       value="{{ n_picks }}">
+        <input type="hidden" name="n_games"       value="{{ n_games }}">
+        <input type="hidden" name="lottery_type"  value="{{ selected_lt }}">
+        <button type="submit" name="action" value="export"
+                class="btn btn-success w-full mt-8">
+          📥 &nbsp; Exportar Excel
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Resultado -->
+  <div>
+    {% if generated %}
+    <div class="card">
+      <div class="flex justify-between items-center mb-16">
+        <div class="section-title">
+          ✅ {{ generated|length }} Jogos Gerados
+        </div>
+        <span class="badge badge-gold">
+          R$ {{ "%.2f"|format(cfg.price * generated|length) }} investidos
+        </span>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>ID</th>
+              <th>Números</th>
+              {% if cfg.extra_name %}<th>{{ cfg.extra_name }}</th>{% endif %}
+              <th>Gerado em</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in generated %}
+            <tr>
+              <td class="text-muted">{{ loop.index }}</td>
+              <td class="col-id">{{ t.id }}</td>
+              <td>
+                <div class="balls">
+                  {% for n in t.numbers %}
+                    <span class="ball ball-sm ticket">{{ "%02d"|format(n) }}</span>
+                  {% endfor %}
+                </div>
+              </td>
+              {% if cfg.extra_name %}
+              <td>{{ t.extra_display }}</td>
+              {% endif %}
+              <td class="text-muted text-sm">{{ t.created_at }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <div class="card" style="height: 300px; display:flex; align-items:center; justify-content:center;">
+      <div class="empty-state">
+        <div class="icon">🎲</div>
+        <p>Configure os parâmetros e clique em<br><strong>Gerar Jogos</strong> para começar.</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', () => updateCost('{{ cfg.price }}'));
+</script>
+{% endblock %}

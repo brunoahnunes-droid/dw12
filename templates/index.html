@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Loterias Caixa{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_sub %}Visão geral do sistema{% endblock %}
+
+{% block content %}
+<div class="grid-4 mb-16">
+  <div class="stat-card accent">
+    <div class="stat-label">Total de Jogos</div>
+    <div class="stat-value">{{ total_tickets }}</div>
+    <div class="stat-sub">cadastrados</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Sorteios Conferidos</div>
+    <div class="stat-value">{{ total_draws }}</div>
+    <div class="stat-sub">no histórico</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Loterias Disponíveis</div>
+    <div class="stat-value">9</div>
+    <div class="stat-sub">tipos de jogo</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Exportações Excel</div>
+    <div class="stat-value">{{ excel_count }}</div>
+    <div class="stat-sub">arquivos gerados</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <!-- Jogos por loteria -->
+  <div class="card">
+    <div class="card-title">Jogos por Loteria</div>
+    {% if by_type %}
+      {% for lt_name, count, emoji, price in by_type %}
+      <div class="info-row">
+        <span class="key">{{ emoji }} {{ lt_name }}</span>
+        <span class="flex items-center gap-8">
+          <span class="badge badge-gray">{{ count }} jogo{{ 's' if count != 1 }}</span>
+          <span class="text-muted text-sm">R$ {{ "%.2f"|format(count * price) }}</span>
+        </span>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">
+        <div class="icon">🎰</div>
+        <p>Nenhum jogo cadastrado ainda.<br>Comece gerando ou adicionando jogos.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Ações rápidas -->
+  <div class="card">
+    <div class="card-title">Ações Rápidas</div>
+    <div class="flex-col gap-8 mt-8">
+      <a href="{{ url_for('gerar') }}" class="btn btn-primary btn-lg w-full">
+        🎲 &nbsp; Gerar Jogos Aleatórios
+      </a>
+      <a href="{{ url_for('adicionar') }}" class="btn btn-ghost btn-lg w-full">
+        ➕ &nbsp; Adicionar Jogo Manual
+      </a>
+      <a href="{{ url_for('conferir') }}" class="btn btn-info btn-lg w-full">
+        🔍 &nbsp; Conferir Sorteio
+      </a>
+      <a href="{{ url_for('probabilidades') }}" class="btn btn-ghost btn-lg w-full">
+        📈 &nbsp; Ver Probabilidades
+      </a>
+    </div>
+
+    {% if last_draw %}
+    <hr class="divider">
+    <div class="card-title">Último Sorteio Conferido</div>
+    <div class="info-row">
+      <span class="key">Jogo</span>
+      <span class="val">{{ last_draw.emoji }} {{ last_draw.name }}</span>
+    </div>
+    <div class="info-row">
+      <span class="key">Concurso</span>
+      <span class="val">{{ last_draw.contest or '—' }}</span>
+    </div>
+    <div class="info-row">
+      <span class="key">Data</span>
+      <span class="val">{{ last_draw.date or '—' }}</span>
+    </div>
+    <div class="balls mt-8">
+      {% for n in last_draw.numbers %}
+        <span class="ball ball-sm drawn">{{ "%02d"|format(n) }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
