@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Bolão · Loterias Caixa{% endblock %}
+{% block page_title %}Bolão{% endblock %}
+{% block page_sub %}Gerencie apostas em grupo{% endblock %}
+
+{% block topbar_right %}
+<a href="{{ url_for('bolao_criar') }}" class="btn btn-primary btn-sm">
+  ➕ Novo Bolão
+</a>
+{% endblock %}
+
+{% block content %}
+{% if pools %}
+<div class="grid-3" style="gap:16px;">
+  {% for p in pools %}
+  <div class="card" style="margin-bottom:0;">
+    <div class="flex justify-between items-center mb-16">
+      <div>
+        <div style="font-size:16px; font-weight:800; color:var(--text);">{{ p.name }}</div>
+        <div class="text-muted text-sm">{{ p.emoji }} {{ p.lt_name }}</div>
+      </div>
+      <span class="badge badge-blue">{{ p.participants|length }} participante(s)</span>
+    </div>
+
+    <div class="info-row">
+      <span class="key">Jogos</span>
+      <span class="val">{{ p.ticket_count }}</span>
+    </div>
+    <div class="info-row">
+      <span class="key">Criado em</span>
+      <span class="val text-sm">{{ p.created_at }}</span>
+    </div>
+    {% if p.notes %}
+    <div class="info-row" style="border:none;">
+      <span class="text-muted text-sm">{{ p.notes }}</span>
+    </div>
+    {% endif %}
+
+    <div style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap;">
+      <a href="{{ url_for('bolao_detalhe', pool_id=p.id) }}" class="btn btn-ghost btn-sm" style="flex:1;">
+        👁️ Detalhar
+      </a>
+      <form method="POST" action="{{ url_for('bolao_excluir', pool_id=p.id) }}"
+            onsubmit="return confirm('Excluir bolão {{ p.name }}? Os jogos não serão deletados.')">
+        <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="card" style="padding:60px;">
+  <div class="empty-state">
+    <div class="icon">👥</div>
+    <p>Nenhum bolão criado ainda.<br>
+      <a href="{{ url_for('bolao_criar') }}" class="text-accent">Crie um bolão</a>
+      para apostar em grupo e dividir os prêmios automaticamente.</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

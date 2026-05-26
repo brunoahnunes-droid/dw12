@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Estatísticas · Loterias Caixa{% endblock %}
+{% block page_title %}Estatísticas{% endblock %}
+{% block page_sub %}Frequência de números com base no histórico de sorteios{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-cols">
+
+  <!-- Painel esquerdo -->
+  <div>
+    <div class="card">
+      <div class="card-title">Tipo de Jogo</div>
+      <form method="GET">
+        <div class="form-group">
+          <select class="form-control" name="lt" onchange="this.form.submit()">
+            {% for lt_val, lt_label in lt_choices %}
+              <option value="{{ lt_val }}" {% if lt_val == selected_lt %}selected{% endif %}>
+                {{ lt_label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Resumo</div>
+      <div class="info-row">
+        <span class="key">Sorteios analisados</span>
+        <span class="val {% if n_draws > 0 %}text-accent{% endif %}">{{ n_draws }}</span>
+      </div>
+      <div class="info-row">
+        <span class="key">Números no universo</span>
+        <span class="val">{{ cfg.hi - cfg.lo + 1 }}</span>
+      </div>
+      <div class="info-row">
+        <span class="key">Números por sorteio</span>
+        <span class="val">{{ cfg.draw_count }}</span>
+      </div>
+      {% if n_draws > 0 %}
+      <div class="info-row">
+        <span class="key">Aparições esperadas</span>
+        <span class="val">{{ "%.1f"|format(n_draws * cfg.draw_count / (cfg.hi - cfg.lo + 1)) }}×</span>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if n_draws > 0 %}
+    <div class="card">
+      <div class="card-title">🔥 Números Mais Frequentes</div>
+      <div class="balls" style="gap:6px; flex-wrap:wrap;">
+        {% for n in hot %}
+          <span class="ball ball-sm" style="background:var(--accent);color:#000;font-weight:800;">
+            {{ "%02d"|format(n) }}
+          </span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🧊 Números Menos Frequentes</div>
+      <div class="balls" style="gap:6px; flex-wrap:wrap;">
+        {% for n in cold %}
+          <span class="ball ball-sm" style="background:var(--info);color:#fff;font-weight:800;">
+            {{ "%02d"|format(n) }}
+          </span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <a href="{{ url_for('gerar', lt=selected_lt) }}" class="btn btn-primary w-full">
+        🎲 Gerar com Estratégia
+      </a>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Painel direito -->
+  <div>
+    {% if n_draws > 0 %}
+    <div class="card mb-16">
+      <div class="card-title">Frequência por Número</div>
+      <div style="position:relative; height:320px;">
+        <canvas id="freq-chart"></canvas>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;">
+      <div style="padding:16px 20px 12px; font-size:13px; font-weight:600;
+                  text-transform:uppercase; letter-spacing:.8px; color:var(--muted);">
+        Ranking de Frequência
+      </div>
+      <div class="table-wrap" style="border:none; max-height:420px; overflow-y:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Número</th>
+              <th>Aparições</th>
+              <th>% do Total</th>
+              <th>Frequência</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% set total_appearances = freq_table | sum(attribute=1) %}
+            {% for num, cnt in freq_table %}
+            {% set pct = cnt / total_appearances * 100 if total_appearances > 0 else 0 %}
+            {% set max_cnt = freq_table[0][1] if freq_table else 1 %}
+            <tr>
+              <td class="text-muted text-sm">{{ loop.index }}</td>
+              <td>
+                <span class="ball ball-sm
+                  {% if loop.index <= 10 %}drawn
+                  {% elif loop.index > freq_table|length - 10 %}
+                  {% endif %}"
+                  style="{% if loop.index > 10 and loop.index <= freq_table|length - 10 %}background:var(--elevated);color:var(--text){% elif loop.index > freq_table|length - 10 %}background:var(--info);color:#fff{% endif %}">
+                  {{ "%02d"|format(num) }}
+                </span>
+              </td>
+              <td class="font-bold">{{ cnt }}</td>
+              <td class="text-muted">{{ "%.1f"|format(pct) }}%</td>
+              <td style="min-width:100px;">
+                <div class="progress-bar" style="width:100px;">
+                  <div class="progress-fill" style="width:{{ (cnt / max_cnt * 100)|int }}%;
+                    background:{% if loop.index <= 10 %}var(--accent){% elif loop.index > freq_table|length - 10 %}var(--info){% else %}var(--muted){% endif %}">
+                  </div>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% else %}
+    <div class="card" style="height:400px; display:flex; align-items:center; justify-content:center;">
+      <div class="empty-state">
+        <div class="icon">📊</div>
+        <p>Nenhum histórico de sorteios salvo para <strong>{{ cfg.name }}</strong>.<br>
+          <a href="{{ url_for('historico') }}" class="text-accent">Importe resultados</a>
+          ou salve sorteios conferidos para ver as estatísticas.</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if n_draws > 0 %}
+<script>
+const ctx = document.getElementById('freq-chart').getContext('2d');
+new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: {{ chart.labels | tojson }},
+    datasets: [{
+      label: 'Frequência',
+      data: {{ chart.values | tojson }},
+      backgroundColor: {{ chart.colors | tojson }},
+      borderRadius: 4,
+      borderSkipped: false,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          title: (items) => `Número ${items[0].label}`,
+          label: (item) => ` Apareceu ${item.raw} vez(es)`,
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: '#7f8ea3', font: { size: 10 } },
+        grid: { color: 'rgba(42,58,85,0.5)' }
+      },
+      y: {
+        beginAtZero: true,
+        ticks: { color: '#7f8ea3', precision: 0 },
+        grid: { color: 'rgba(42,58,85,0.5)' }
+      }
+    }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

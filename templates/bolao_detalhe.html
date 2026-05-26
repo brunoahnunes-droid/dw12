@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% block title %}{{ pool.name }} · Bolão{% endblock %}
+{% block page_title %}{{ pool.name }}{% endblock %}
+{% block page_sub %}{{ pool.lottery_type }} · {{ pool.participants|length }} participante(s){% endblock %}
+
+{% block topbar_right %}
+<a href="{{ url_for('bolao') }}" class="btn btn-ghost btn-sm">← Voltar</a>
+{% endblock %}
+
+{% block content %}
+<div class="page-cols-wide">
+
+  <!-- Coluna esquerda -->
+  <div>
+
+    <!-- Info do bolão -->
+    <div class="card">
+      <div class="card-title">Detalhes</div>
+      <div class="info-row">
+        <span class="key">Criado em</span>
+        <span class="val">{{ pool.created_at }}</span>
+      </div>
+      <div class="info-row">
+        <span class="key">Loteria</span>
+        <span class="val">{{ cfg.emoji }} {{ cfg.name }}</span>
+      </div>
+      <div class="info-row">
+        <span class="key">Jogos no bolão</span>
+        <span class="val">{{ pool_tickets|length }}</span>
+      </div>
+      <div class="info-row">
+        <span class="key">Custo total</span>
+        <span class="val text-danger">R$ {{ "%.2f"|format(total_cost) }}</span>
+      </div>
+      <div class="info-row">
+        <span class="key">Por pessoa</span>
+        <span class="val text-accent">R$ {{ "%.2f"|format(per_person) }}</span>
+      </div>
+      {% if pool.notes %}
+      <div class="info-row" style="border:none;">
+        <span class="text-muted text-sm">{{ pool.notes }}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Participantes -->
+    <div class="card">
+      <div class="card-title">Participantes</div>
+      <div class="flex" style="flex-wrap:wrap; gap:6px;">
+        {% for p in pool.participants %}
+          <span class="badge badge-blue">👤 {{ p }}</span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Adicionar jogos -->
+    {% if available %}
+    <div class="card">
+      <div class="card-title">Adicionar Jogo ao Bolão</div>
+      <form method="POST" action="{{ url_for('bolao_adicionar_jogo', pool_id=pool.id) }}">
+        <div class="form-group">
+          <select class="form-control" name="ticket_id">
+            {% for t in available %}
+              <option value="{{ t.id }}">
+                {{ t.id }} — {{ t.numbers|join(' ') }}{% if t.label %} ({{ t.label }}){% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary w-full">➕ Adicionar Jogo</button>
+      </form>
+    </div>
+    {% else %}
+    <div class="card">
+      <div class="text-muted text-sm">
+        Nenhum jogo de <strong>{{ cfg.name }}</strong> disponível.
+        <a href="{{ url_for('gerar', lt=cfg.name) }}" class="text-accent">Gere jogos</a> primeiro.
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Conferir sorteio -->
+    <div class="card">
+      <div class="card-title">Conferir Sorteio do Bolão</div>
+      <form method="POST" action="{{ url_for('bolao_conferir', pool_id=pool.id) }}">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Nº Concurso</label>
+            <input class="form-control" type="text" name="contest"
+                   placeholder="Ex: 3120" value="{{ form.contest }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Data</label>
+            <input class="form-control" type="text" name="draw_date"
+                   value="{{ form.draw_date }}">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">
+            Números Sorteados
+            <span class="text-muted text-sm">({{ cfg.draw_count }} números)</span>
+          </label>
+          <input class="form-control" type="text" name="numbers"
+                 placeholder="Ex: 05 12 23 34 45 56" value="{{ form.numbers }}"
+                 style="font-size:15px; font-weight:700; letter-spacing:2px;">
+        </div>
+        {% if cfg.has_second_draw %}
+        <div class="form-group">
+          <label class="form-label">2º Sorteio</label>
+          <input class="form-control" type="text" name="numbers2"
+                 value="{{ form.numbers2 }}" style="font-size:15px; font-weight:700;">
+        </div>
+        {% endif %}
+        <button type="submit" class="btn btn-primary w-full">🔍 Conferir Bolão</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Coluna direita -->
+  <div>
+
+    {% if results %}
+    <!-- Resultado financeiro do bolão -->
+    <div class="card mb-16">
+      <div class="card-title">Números Sorteados — Concurso {{ draw.contest_number or '—' }}</div>
+      <div class="balls">
+        {% for n in draw.numbers|sort %}
+          <span class="ball drawn">{{ "%02d"|format(n) }}</span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="grid-4 mb-16" style="grid-template-columns:1fr 1fr 1fr 1fr;">
+      <div class="stat-card">
+        <div class="stat-label">Jogos</div>
+        <div class="stat-value">{{ fin.total }}</div>
+        <div class="stat-sub">no bolão</div>
+      </div>
+      <div class="stat-card {% if fin.winners > 0 %}success{% endif %}">
+        <div class="stat-label">Premiados</div>
+        <div class="stat-value">{{ fin.winners }}</div>
+      </div>
+      <div class="stat-card danger">
+        <div class="stat-label">Investido</div>
+        <div class="stat-value" style="font-size:18px;">R$ {{ "%.2f"|format(fin.spent) }}</div>
+        <div class="stat-sub">R$ {{ "%.2f"|format(fin.per_person_cost) }}/pessoa</div>
+      </div>
+      <div class="stat-card {% if fin.net >= 0 %}success{% endif %}">
+        <div class="stat-label">Saldo</div>
+        <div class="stat-value" style="font-size:18px; color:{{ 'var(--success)' if fin.net >= 0 else 'var(--danger)' }}">
+          R$ {{ "%+.2f"|format(fin.per_person_net) }}
+        </div>
+        <div class="stat-sub">por pessoa</div>
+      </div>
+    </div>
+
+    {% if fin.var_prizes %}
+    <div class="card mb-16" style="border-color:var(--warn)">
+      ⚠️ <strong>Prêmios variáveis:</strong> {{ fin.var_prizes|join(' · ') }} — consulte a Caixa.
+    </div>
+    {% endif %}
+
+    <div class="card" style="padding:0;">
+      <div class="table-wrap" style="border:none; border-radius:var(--radius);">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Números (🟢=acerto)</th>
+              <th>Acertos</th>
+              <th>Prêmio</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in results %}
+            <tr class="{{ 'winner' if r.is_winner }}">
+              <td class="col-id">{{ r.id }}</td>
+              <td>
+                <div class="balls">
+                  {% for n in r.numbers %}
+                    <span class="ball ball-sm {{ 'matched' if n in r.matched_set else 'ticket' }}">
+                      {{ "%02d"|format(n) }}
+                    </span>
+                  {% endfor %}
+                </div>
+              </td>
+              <td>
+                <span class="badge {{ 'badge-green' if r.matches >= 3 else 'badge-gray' }}">
+                  {{ r.matches }}
+                </span>
+              </td>
+              <td>
+                {% if r.prize %}
+                  <span class="badge {{ 'badge-gold' if r.prize_type=='jackpot' else ('badge-green' if r.prize_type=='fixed' else 'badge-blue') }}">
+                    {{ r.prize }}
+                  </span>
+                {% else %}
+                  <span class="text-muted text-sm">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% else %}
+
+    <!-- Lista de jogos do bolão -->
+    {% if pool_tickets %}
+    <div class="card" style="padding:0;">
+      <div style="padding:16px 20px 12px; font-size:13px; font-weight:600;
+                  text-transform:uppercase; letter-spacing:.8px; color:var(--muted);">
+        Jogos no Bolão ({{ pool_tickets|length }})
+      </div>
+      <div class="table-wrap" style="border:none; border-radius:var(--radius);">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Números</th>
+              <th>Extra</th>
+              <th>Ação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in pool_tickets %}
+            <tr>
+              <td class="col-id">{{ t.id }}</td>
+              <td>
+                <div class="balls">
+                  {% for n in t.numbers[:12] %}
+                    <span class="ball ball-sm ticket">{{ "%02d"|format(n) }}</span>
+                  {% endfor %}
+                  {% if t.numbers|length > 12 %}
+                    <span class="text-muted text-sm">+{{ t.numbers|length - 12 }}</span>
+                  {% endif %}
+                </div>
+              </td>
+              <td class="text-muted text-sm">{{ t.extra_display }}</td>
+              <td>
+                <form method="POST"
+                      action="{{ url_for('bolao_remover_jogo', pool_id=pool.id) }}"
+                      onsubmit="return confirm('Remover jogo {{ t.id }} do bolão?')">
+                  <input type="hidden" name="ticket_id" value="{{ t.id }}">
+                  <button type="submit" class="btn btn-danger btn-sm">✕</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% else %}
+    <div class="card" style="height:300px; display:flex; align-items:center; justify-content:center;">
+      <div class="empty-state">
+        <div class="icon">🎰</div>
+        <p>Nenhum jogo adicionado ao bolão ainda.<br>
+          Use o painel ao lado para adicionar jogos.</p>
+      </div>
+    </div>
+    {% endif %}
+
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

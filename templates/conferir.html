@@ -25,12 +25,19 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Nº do Concurso</label>
-            <input class="form-control" type="text" name="contest"
-                   placeholder="Ex: 2024-001" value="{{ form.contest }}">
+            <div class="flex gap-8" style="align-items:center;">
+              <input class="form-control" type="text" name="contest" id="field-contest"
+                     placeholder="Ex: 3120" value="{{ form.contest }}">
+              <button type="button" id="btn-buscar"
+                      class="btn btn-info" style="white-space:nowrap; flex-shrink:0;"
+                      onclick="buscarOnline()">
+                🌐 Buscar
+              </button>
+            </div>
           </div>
           <div class="form-group">
             <label class="form-label">Data</label>
-            <input class="form-control" type="text" name="draw_date"
+            <input class="form-control" type="text" name="draw_date" id="field-date"
                    placeholder="Ex: 22/05/2026" value="{{ form.draw_date }}">
           </div>
         </div>
@@ -40,7 +47,7 @@
             Números Sorteados
             <span class="text-muted text-sm">({{ cfg.draw_count }} números, separe por espaço)</span>
           </label>
-          <input class="form-control" type="text" name="numbers"
+          <input class="form-control" type="text" name="numbers" id="field-numbers"
                  placeholder="Ex: 05 12 23 34 45 56" value="{{ form.numbers }}"
                  style="font-size:16px; font-weight:700; letter-spacing:2px;">
         </div>
@@ -48,7 +55,7 @@
         {% if cfg.has_second_draw %}
         <div class="form-group">
           <label class="form-label">2º Sorteio (Dupla-Sena)</label>
-          <input class="form-control" type="text" name="numbers2"
+          <input class="form-control" type="text" name="numbers2" id="field-numbers2"
                  placeholder="Ex: 07 14 21 28 35 42" value="{{ form.numbers2 }}"
                  style="font-size:16px; font-weight:700; letter-spacing:2px;">
         </div>
@@ -140,7 +147,6 @@
   <!-- Resultados -->
   <div>
     {% if results %}
-    <!-- Números sorteados -->
     <div class="card mb-16">
       <div class="card-title">Números Sorteados
         {% if draw.contest_number %}— Concurso {{ draw.contest_number }}{% endif %}
@@ -161,14 +167,11 @@
       {% endif %}
       {% if draw.extra %}
       <div class="mt-8">
-        <span class="badge badge-gold">
-          {{ cfg.extra_name }}: {{ extra_display }}
-        </span>
+        <span class="badge badge-gold">{{ cfg.extra_name }}: {{ extra_display }}</span>
       </div>
       {% endif %}
     </div>
 
-    <!-- Resumo financeiro -->
     <div class="grid-4 mb-16">
       <div class="stat-card">
         <div class="stat-label">Jogos</div>
@@ -184,7 +187,7 @@
         <div class="stat-label">Investido</div>
         <div class="stat-value" style="font-size:22px">R$ {{ "%.2f"|format(fin.spent) }}</div>
       </div>
-      <div class="stat-card {% if fin.net >= 0 %}success{% else %}{% endif %}">
+      <div class="stat-card {% if fin.net >= 0 %}success{% endif %}">
         <div class="stat-label">Saldo Líquido</div>
         <div class="stat-value" style="font-size:20px; color:{{ 'var(--success)' if fin.net >= 0 else 'var(--danger)' }}">
           R$ {{ "%+.2f"|format(fin.net) }}
@@ -196,12 +199,11 @@
     {% if fin.var_prizes %}
     <div class="card mb-16" style="border-color:var(--warn)">
       <span style="color:var(--warn)">⚠️</span>
-      <strong>Prêmios variáveis ganhos:</strong> {{ fin.var_prizes|join(' · ') }}
+      <strong>Prêmios variáveis:</strong> {{ fin.var_prizes|join(' · ') }}
       — consulte a Caixa para o valor exato.
     </div>
     {% endif %}
 
-    <!-- Tabela de resultados -->
     <div class="card" style="padding:0;">
       <div class="table-wrap" style="border:none; border-radius:var(--radius);">
         <table>
@@ -268,11 +270,44 @@
     <div class="card" style="height:400px; display:flex; align-items:center; justify-content:center;">
       <div class="empty-state">
         <div class="icon">🔍</div>
-        <p>Insira os números sorteados e clique em<br>
-          <strong>Conferir Sorteio</strong> para ver os resultados.</p>
+        <p>Digite o número do concurso e clique em<br>
+          <strong>🌐 Buscar</strong> para preencher automaticamente,<br>
+          ou insira os números manualmente.</p>
       </div>
     </div>
     {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function buscarOnline() {
+  const lt      = document.querySelector('[name=lottery_type]').value;
+  const contest = document.getElementById('field-contest').value.trim();
+  const btn     = document.getElementById('btn-buscar');
+  btn.textContent = '⏳';
+  btn.disabled = true;
+  try {
+    const url = `/api/resultado?lt=${encodeURIComponent(lt)}&concurso=${encodeURIComponent(contest)}`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (data.error) { showToast(data.error, 'error'); return; }
+    document.getElementById('field-numbers').value =
+      (data.numbers || []).map(n => String(n).padStart(2,'0')).join(' ');
+    document.getElementById('field-date').value = data.date || '';
+    if (data.contest && !document.getElementById('field-contest').value)
+      document.getElementById('field-contest').value = data.contest;
+    const f2 = document.getElementById('field-numbers2');
+    if (f2 && data.numbers2)
+      f2.value = data.numbers2.map(n => String(n).padStart(2,'0')).join(' ');
+    showToast('Resultado carregado!', 'success');
+  } catch(e) {
+    showToast('Erro ao buscar na API da Caixa', 'error');
+  } finally {
+    btn.textContent = '🌐 Buscar';
+    btn.disabled = false;
+  }
+}
+</script>
 {% endblock %}

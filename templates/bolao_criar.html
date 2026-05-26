@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Criar Bolão · Loterias Caixa{% endblock %}
+{% block page_title %}Criar Bolão{% endblock %}
+{% block page_sub %}Configure um novo grupo de apostas{% endblock %}
+
+{% block content %}
+<div style="max-width:560px;">
+  <div class="card">
+    <div class="card-title">Dados do Bolão</div>
+    <form method="POST">
+
+      <div class="form-group">
+        <label class="form-label">Nome do Bolão</label>
+        <input class="form-control" type="text" name="name"
+               placeholder="Ex: Bolão da Família, Bolão do Trabalho..." required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Tipo de Jogo</label>
+        <select class="form-control" name="lottery_type">
+          {% for lt_val, lt_label in lt_choices %}
+            <option value="{{ lt_val }}">{{ lt_label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">
+          Participantes
+          <span class="text-muted text-sm">(separe por vírgula)</span>
+        </label>
+        <input class="form-control" type="text" name="participants"
+               placeholder="João, Maria, Pedro, Ana..." required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Observações (opcional)</label>
+        <input class="form-control" type="text" name="notes"
+               placeholder="Ex: Cada um paga R$ 10 por semana">
+      </div>
+
+      <div class="flex gap-8" style="margin-top:8px;">
+        <a href="{{ url_for('bolao') }}" class="btn btn-ghost">← Voltar</a>
+        <button type="submit" class="btn btn-primary" style="flex:1;">
+          👥 Criar Bolão
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

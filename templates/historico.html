@@ -1,9 +1,43 @@
 {% extends "base.html" %}
 {% block title %}Histórico · Loterias Caixa{% endblock %}
 {% block page_title %}Histórico de Sorteios{% endblock %}
-{% block page_sub %}{{ draws|length }} sorteio(s) conferido(s) e salvo(s){% endblock %}
+{% block page_sub %}{{ draws|length }} sorteio(s) salvo(s){% endblock %}
+
+{% block topbar_right %}
+<button class="btn btn-info btn-sm" onclick="toggleImport()">📥 Importar Online</button>
+{% endblock %}
 
 {% block content %}
+
+<!-- Painel de importação -->
+<div id="import-panel" style="display:none;" class="card mb-16" style="border-color:var(--info)">
+  <div class="card-title">Importar Resultados da API Caixa</div>
+  <form method="POST" action="{{ url_for('importar_historico') }}">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Tipo de Jogo</label>
+        <select class="form-control" name="lottery_type">
+          {% for lt_val, lt_label in lt_choices %}
+            <option value="{{ lt_val }}">{{ lt_label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Quantidade de concursos</label>
+        <input class="form-control" type="number" name="n_import"
+               value="50" min="1" max="200">
+      </div>
+    </div>
+    <div class="text-muted text-sm" style="margin-bottom:12px;">
+      ℹ️ Importa os N resultados mais recentes da API oficial da Caixa.
+      Concursos já salvos são ignorados automaticamente.
+    </div>
+    <button type="submit" class="btn btn-info w-full">
+      🌐 Importar Resultados Online
+    </button>
+  </form>
+</div>
+
 {% if draws %}
 <div class="card" style="padding:0;">
   <div class="table-wrap" style="border:none; border-radius:var(--radius);">
@@ -29,7 +63,7 @@
                 <span class="ball ball-sm drawn">{{ "%02d"|format(n) }}</span>
               {% endfor %}
             </div>
-            {% if d.numbers2 %}
+            {% if d.numbers2_sorted %}
             <div class="balls mt-8">
               {% for n in d.numbers2_sorted %}
                 <span class="ball ball-sm" style="background:var(--info);color:#fff">
@@ -53,8 +87,18 @@
     <div class="icon">🕐</div>
     <p>Nenhum sorteio salvo ainda.<br>
       <a href="{{ url_for('conferir') }}" class="text-accent">Confira um sorteio</a>
-      e salve no histórico.</p>
+      e salve no histórico, ou clique em
+      <strong>📥 Importar Online</strong> para buscar da API da Caixa.</p>
   </div>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleImport() {
+  const p = document.getElementById('import-panel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+</script>
 {% endblock %}

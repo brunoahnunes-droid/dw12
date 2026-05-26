@@ -46,10 +46,19 @@
     <a href="{{ url_for('conferir') }}" class="nav-item {% if active=='conferir' %}active{% endif %}">
       <span class="icon">🔍</span> Conferir Sorteio
     </a>
+    <a href="{{ url_for('bolao') }}" class="nav-item {% if active=='bolao' %}active{% endif %}">
+      <span class="icon">👥</span> Bolão
+      {% if pool_count > 0 %}
+        <span class="badge-count">{{ pool_count }}</span>
+      {% endif %}
+    </a>
 
     <div class="nav-section">Análise</div>
     <a href="{{ url_for('probabilidades') }}" class="nav-item {% if active=='probabilidades' %}active{% endif %}">
       <span class="icon">📈</span> Probabilidades
+    </a>
+    <a href="{{ url_for('estatisticas') }}" class="nav-item {% if active=='estatisticas' %}active{% endif %}">
+      <span class="icon">🔥</span> Estatísticas
     </a>
     <a href="{{ url_for('historico') }}" class="nav-item {% if active=='historico' %}active{% endif %}">
       <span class="icon">🕐</span> Histórico
@@ -58,7 +67,7 @@
 
   <div class="sidebar-footer">
     <div class="text-muted text-sm" style="padding: 8px 4px;">
-      v2.0 &nbsp;·&nbsp; 9 loterias suportadas
+      v3.0 &nbsp;·&nbsp; 9 loterias · Bolão · IA
     </div>
   </div>
 </aside>
