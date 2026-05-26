@@ -1,8 +1,15 @@
-"""Fetches official draw results from the Caixa Econômica Federal API."""
+"""Fetches official draw results from Caixa Econômica Federal.
+
+Strategy:
+  1. Try the official Caixa API (servicebus.caixa.gov.br).
+  2. On failure, fall back to the community wrapper (loteriascaixa-api.herokuapp.com).
+"""
 from __future__ import annotations
 
 import requests
 from typing import Optional
+
+# ── slugs ──────────────────────────────────────────────────────────────────
 
 SLUGS = {
     "Mega-Sena":     "megasena",
@@ -16,7 +23,8 @@ SLUGS = {
     "+Milionária":   "maismilionaria",
 }
 
-BASE = "https://servicebus.caixa.gov.br/portaldeloterias/api"
+_OFFICIAL  = "https://servicebus.caixa.gov.br/portaldeloterias/api"
+_COMMUNITY = "https://loteriascaixa-api.herokuapp.com/api"
 
 _HEADERS = {
     "User-Agent": (
@@ -25,105 +33,172 @@ _HEADERS = {
     ),
     "Accept": "application/json, text/plain, */*",
     "Referer": "https://loterias.caixa.gov.br/",
-    "Origin":  "https://loterias.caixa.gov.br",
 }
 
+# Month names returned by the API (title-case)
 _MONTHS_PT = {
+    "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
+    "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
+    "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12,
+    # uppercase fallback
     "JANEIRO": 1, "FEVEREIRO": 2, "MARÇO": 3, "ABRIL": 4,
     "MAIO": 5, "JUNHO": 6, "JULHO": 7, "AGOSTO": 8,
     "SETEMBRO": 9, "OUTUBRO": 10, "NOVEMBRO": 11, "DEZEMBRO": 12,
 }
 
+# Dupla-Sena: how many numbers per draw
+_DUPLA_DRAW = 6
+
+
+# ── low-level HTTP ─────────────────────────────────────────────────────────
 
 def _get(url: str) -> Optional[dict]:
     try:
         r = requests.get(url, headers=_HEADERS, timeout=12, verify=True)
         r.raise_for_status()
-        return r.json()
+        raw = r.json()
+        # community wrapper returns a list; take the first (= latest) element
+        return raw[0] if isinstance(raw, list) else raw
     except Exception:
         return None
 
 
-def fetch_latest(lt_name: str) -> Optional[dict]:
+def _official_url(slug: str, contest: int | str | None) -> str:
+    base = f"{_OFFICIAL}/{slug}"
+    return f"{base}/{contest}" if contest else base
+
+
+def _community_url(slug: str, contest: int | str | None) -> str:
+    base = f"{_COMMUNITY}/{slug}"
+    return f"{base}/{contest}" if contest else base
+
+
+def _fetch(lt_name: str, contest: int | str | None = None) -> Optional[dict]:
     slug = SLUGS.get(lt_name)
-    return _get(f"{BASE}/{slug}") if slug else None
+    if not slug:
+        return None
+    data = _get(_official_url(slug, contest))
+    if data:
+        data["_source"] = "official"
+        return data
+    data = _get(_community_url(slug, contest))
+    if data:
+        data["_source"] = "community"
+    return data
+
+
+# ── public helpers ─────────────────────────────────────────────────────────
+
+def fetch_latest(lt_name: str) -> Optional[dict]:
+    return _fetch(lt_name)
 
 
 def fetch_contest(lt_name: str, contest: int | str) -> Optional[dict]:
-    slug = SLUGS.get(lt_name)
-    return _get(f"{BASE}/{slug}/{contest}") if slug else None
+    return _fetch(lt_name, contest)
 
+
+# ── parsing ────────────────────────────────────────────────────────────────
 
 def _parse_nums(raw) -> list[int]:
     if not raw:
         return []
     try:
-        return sorted(int(n) for n in raw)
+        return [int(n) for n in raw]
     except (TypeError, ValueError):
         return []
 
 
+def _find_team_id(name: str) -> Optional[int]:
+    """Match a team name string (possibly 'TEAM /STATE') to a team ID."""
+    from models.lottery_types import TIMEMANIA_TEAMS
+    norm = name.upper().split("/")[0].strip()
+    for tid, tname in TIMEMANIA_TEAMS.items():
+        if tname.upper() == norm:
+            return tid
+    # partial match fallback
+    for tid, tname in TIMEMANIA_TEAMS.items():
+        if norm in tname.upper() or tname.upper() in norm:
+            return tid
+    return None
+
+
 def parse(data: dict, lt_name: str) -> Optional[dict]:
-    """Normalise Caixa API response into a plain dict."""
+    """Normalise a raw API response (official or community) into a plain dict."""
     if not data:
         return None
     try:
-        numbers = _parse_nums(
-            data.get("dezenasSorteadasOrdemSorteio")
-            or data.get("listaDezenas")
-            or data.get("dezenas")
-        )
-        if not numbers:
-            return None
+        source = data.get("_source", "official")
 
-        contest = str(data.get("numero") or data.get("concurso") or "")
-        date = data.get("dataApuracao", "")
-        # normalise ISO → dd/MM/yyyy
+        # ── contest & date ──────────────────────────────────────────────
+        contest = str(data.get("concurso") or data.get("numero") or "")
+        date    = data.get("data") or data.get("dataApuracao") or ""
+        # official API may return ISO; community already returns dd/MM/yyyy
         if date and date.count("-") == 2:
             y, m, d = date.split("-")
             date = f"{d}/{m}/{y}"
 
+        # ── main numbers ────────────────────────────────────────────────
+        # Prefer dezenasOrdemSorteio (draw order) when available;
+        # for Dupla-Sena it contains BOTH draws concatenated (12 numbers).
+        raw_nums = (data.get("dezenas")
+                    or data.get("dezenasOrdemSorteio")
+                    or data.get("dezenasSorteadasOrdemSorteio")
+                    or data.get("listaDezenas")
+                    or [])
+
+        if lt_name == "Dupla-Sena":
+            all_nums = _parse_nums(raw_nums)
+            if len(all_nums) >= _DUPLA_DRAW * 2:
+                numbers  = sorted(all_nums[:_DUPLA_DRAW])
+                numbers2 = sorted(all_nums[_DUPLA_DRAW:_DUPLA_DRAW * 2])
+            elif len(all_nums) >= _DUPLA_DRAW:
+                numbers  = sorted(all_nums[:_DUPLA_DRAW])
+                numbers2 = None
+            else:
+                return None
+        else:
+            numbers = sorted(_parse_nums(raw_nums))
+            if not numbers:
+                return None
+            numbers2 = None
+
         out: dict = {
-            "numbers": numbers,
-            "contest": contest,
-            "date": date,
-            "accumulated": bool(data.get("acumulado")),
+            "numbers":     numbers,
+            "numbers2":    numbers2,
+            "contest":     contest,
+            "date":        date,
+            "accumulated": bool(data.get("acumulou") or data.get("acumulado")),
         }
 
-        nxt = data.get("valorEstimadoProximoConcurso") or \
-              data.get("valorAcumuladoProximoConcurso")
+        nxt = (data.get("valorEstimadoProximoConcurso")
+               or data.get("valorAcumuladoProximoConcurso"))
         if nxt:
             try:
                 out["next_prize"] = float(nxt)
             except (TypeError, ValueError):
                 pass
 
-        if lt_name == "Dupla-Sena":
-            nums2 = _parse_nums(data.get("dezenas2") or data.get("listaDezenas2"))
-            if nums2:
-                out["numbers2"] = nums2
-
+        # ── extras ─────────────────────────────────────────────────────
         if lt_name == "Timemania":
-            from models.lottery_types import TIMEMANIA_TEAMS
-            team = (data.get("nomeTimeCoracaoMesSorte") or "").strip()
-            for tid, tname in TIMEMANIA_TEAMS.items():
-                if tname.upper() == team.upper():
-                    out["extra"] = tid
-                    break
+            team = (data.get("timeCoracao") or "").strip()
+            out["extra"]       = _find_team_id(team)
             out["extra_label"] = team
 
         elif lt_name == "Dia de Sorte":
-            month = (data.get("nomeTimeCoracaoMesSorte") or "").upper()
-            out["extra"] = _MONTHS_PT.get(month)
-            out["extra_label"] = month.capitalize()
+            mes = (data.get("mesSorte") or data.get("nomeTimeCoracaoMesSorte") or "").strip()
+            out["extra"]       = _MONTHS_PT.get(mes)
+            out["extra_label"] = mes
 
         elif lt_name == "+Milionária":
             trevos = _parse_nums(
-                data.get("trevos") or data.get("trevosSorteadosOrdemSorteio")
+                data.get("trevos")
+                or data.get("trevosSorteadosOrdemSorteio")
+                or []
             )
             if trevos:
-                out["trevos"] = trevos
+                out["trevos"] = sorted(trevos)
 
         return out
+
     except Exception:
         return None
