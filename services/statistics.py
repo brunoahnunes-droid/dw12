@@ -50,7 +50,7 @@ def chart_data(freq: Dict[int, int]) -> dict:
             colors.append("rgba(74,85,104,0.70)")    # neutral
     return {
         "labels": [str(n) for n in nums],
-        "values": values,
+        "data": values,
         "colors": colors,
     }
 

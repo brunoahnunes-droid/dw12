@@ -163,7 +163,7 @@ new Chart(ctx, {
     labels: {{ chart.labels | tojson }},
     datasets: [{
       label: 'Frequência',
-      data: {{ chart.values | tojson }},
+      data: {{ chart.data | tojson }},
       backgroundColor: {{ chart.colors | tojson }},
       borderRadius: 4,
       borderSkipped: false,
