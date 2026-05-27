@@ -577,6 +577,111 @@ def estatisticas():
                            **common_ctx())
 
 
+# ─── Combinador ──────────────────────────────────────────────────────────────
+
+@app.route("/combinar", methods=["GET", "POST"])
+def combinar():
+    from services.combinator import (
+        compute_moldura, build_grid, combine,
+        apply_moldura_filter, combo_stats, grid_cols,
+    )
+    from services.probability import hyper_at_least, odds_string
+    import math
+
+    selected_lt_name = (request.form.get("lottery_type") or
+                        request.args.get("lt") or "Lotofácil")
+    lt     = resolve_lt(selected_lt_name)
+    cfg_lt = LOTTERY_CONFIGS[lt]
+    cfg    = cfg_context(lt)
+
+    moldura, miolo = compute_moldura(lt)
+    grid           = build_grid(lt)
+    k              = cfg_lt.draw_count   # numbers per game
+
+    # derive min/max moldura sensible defaults based on lottery
+    moldura_size = len(moldura)
+    default_min_m = max(1, k - len(miolo))         # can't pick more miolo than exist
+    default_max_m = min(k, moldura_size)
+
+    action        = request.form.get("action", "")
+    combos_raw    = []
+    filtered      = []
+    total_possible = 0
+    truncated     = False
+    selected_nums  = []
+    max_games      = 500
+    min_m          = max(0, round(k * 0.6))
+    max_m          = k
+    use_filter     = False
+    prob_single    = 0.0
+    prob_n         = 0.0
+
+    if action == "combine":
+        nums_str      = request.form.get("dezenas", "").strip()
+        selected_nums = [int(x) for x in nums_str.split() if x.strip().isdigit()]
+        max_games     = max(1, min(5000, int(request.form.get("max_games", 500))))
+        min_m         = int(request.form.get("min_moldura", min_m))
+        max_m         = int(request.form.get("max_moldura", max_m))
+        use_filter    = request.form.get("use_filter") == "1"
+
+        if len(selected_nums) < k:
+            flash(f"Selecione ao menos {k} dezenas.", "error")
+        else:
+            combos_raw, total_possible, truncated = combine(selected_nums, k, max_games)
+            filtered = apply_moldura_filter(combos_raw, moldura, min_m, max_m) if use_filter else combos_raw
+
+            # Probability calculations
+            N = cfg_lt.number_range[1] - cfg_lt.number_range[0] + 1
+            min_prize_matches = cfg_lt.prize_tiers[-1].min_matches if cfg_lt.prize_tiers else k
+            prob_single = hyper_at_least(N, k, k, min_prize_matches)
+            n = len(filtered)
+            prob_n = 1 - (1 - prob_single) ** n if n > 0 else 0.0
+
+    elif action == "save":
+        nums_str      = request.form.get("dezenas", "").strip()
+        selected_nums = [int(x) for x in nums_str.split() if x.strip().isdigit()]
+        combos_str    = request.form.get("combos_data", "")
+        saved = 0
+        for line in combos_str.strip().splitlines():
+            nums = [int(x) for x in line.split() if x.isdigit()]
+            if len(nums) == k:
+                t = Ticket.create(lt, nums)
+                store.add_ticket(t)
+                saved += 1
+        flash(f"{saved} jogo(s) salvos!", "success")
+        return redirect(url_for("jogos"))
+
+    # Pre-encode combos as "01 02 03 ...\n" lines for the save form
+    combos_data_str = "\n".join(" ".join(f"{n:02d}" for n in c) for c in filtered)
+
+    n_cols = grid_cols(lt)
+
+    return render_template("combinar.html", active="combinar",
+                           selected_lt=selected_lt_name,
+                           cfg=cfg,
+                           grid=grid,
+                           n_cols=n_cols,
+                           moldura=moldura,
+                           miolo=miolo,
+                           k=k,
+                           combos=filtered,
+                           combos_data_str=combos_data_str,
+                           total_possible=total_possible,
+                           truncated=truncated,
+                           selected_nums=set(selected_nums),
+                           selected_nums_str=" ".join(str(n) for n in sorted(selected_nums)),
+                           max_games=max_games,
+                           min_m=min_m,
+                           max_m=max_m,
+                           use_filter=use_filter,
+                           prob_single=prob_single,
+                           prob_n=prob_n,
+                           odds_single=odds_string(prob_single),
+                           odds_n=odds_string(prob_n),
+                           combo_stats=combo_stats,
+                           **common_ctx())
+
+
 # ─── Bolão ────────────────────────────────────────────────────────────────────
 
 @app.route("/bolao")

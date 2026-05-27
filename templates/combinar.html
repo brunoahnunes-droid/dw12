@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+{% block title %}Combinador · Mega do Carlão{% endblock %}
+{% block page_title %}Combinador de Dezenas{% endblock %}
+{% block page_sub %}Desdobramento com filtro de moldura e miolo{% endblock %}
+
+{% block content %}
+<div class="page-cols">
+
+  <!-- Painel esquerdo: configuração -->
+  <div>
+    <div class="card">
+      <div class="card-title">Configuração</div>
+      <form method="POST" id="combo-form">
+        <input type="hidden" name="action" value="combine">
+        <input type="hidden" name="dezenas" id="hidden-dezenas" value="{{ selected_nums_str }}">
+
+        <div class="form-group">
+          <label class="form-label">Tipo de Jogo</label>
+          <select class="form-control" name="lottery_type" onchange="this.form.submit()">
+            {% for lt_val, lt_label in lt_choices %}
+              <option value="{{ lt_val }}" {% if lt_val == selected_lt %}selected{% endif %}>
+                {{ lt_label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Info do jogo -->
+        <div class="card" style="background:var(--elevated); margin:0 0 16px; padding:12px 16px;">
+          <div class="info-row">
+            <span class="key">Intervalo</span>
+            <span class="val">{{ cfg.lo }}–{{ cfg.hi }}</span>
+          </div>
+          <div class="info-row">
+            <span class="key">Dezenas por jogo</span>
+            <span class="val">{{ k }}</span>
+          </div>
+          <div class="info-row">
+            <span class="key">Moldura</span>
+            <span class="val" style="color:var(--info)">{{ moldura|length }} números</span>
+          </div>
+          <div class="info-row" style="border:none">
+            <span class="key">Miolo</span>
+            <span class="val" style="color:var(--accent)">{{ miolo|length }} números</span>
+          </div>
+        </div>
+
+        <!-- Grid clicável -->
+        <div class="form-group">
+          <label class="form-label">
+            Selecione as dezenas
+            <span class="text-muted text-sm" id="sel-count">
+              ({{ selected_nums|length }} selecionada(s))
+            </span>
+          </label>
+
+          <!-- Legenda -->
+          <div class="flex gap-8 mb-8" style="flex-wrap:wrap; font-size:11px;">
+            <span style="display:flex;align-items:center;gap:4px;">
+              <span style="width:14px;height:14px;border-radius:50%;background:rgba(59,130,246,.25);border:1.5px solid var(--info);display:inline-block;"></span>
+              Moldura
+            </span>
+            <span style="display:flex;align-items:center;gap:4px;">
+              <span style="width:14px;height:14px;border-radius:50%;background:rgba(245,166,35,.15);border:1.5px solid var(--accent);display:inline-block;"></span>
+              Miolo
+            </span>
+            <span style="display:flex;align-items:center;gap:4px;">
+              <span style="width:14px;height:14px;border-radius:50%;background:var(--success);border:1.5px solid var(--success);display:inline-block;"></span>
+              Selecionado
+            </span>
+          </div>
+
+          <div id="num-grid" style="display:grid; grid-template-columns:repeat({{ n_cols }}, 1fr); gap:4px;">
+            {% for row in grid %}
+              {% for num in row %}
+                {% if num is not none %}
+                  {% set is_mol = num in moldura %}
+                  {% set is_sel = num in selected_nums %}
+                  <button type="button"
+                    class="grid-ball {% if is_sel %}sel{% elif is_mol %}mol{% else %}mio{% endif %}"
+                    data-num="{{ num }}"
+                    onclick="toggleNum({{ num }})">
+                    {{ "%02d"|format(num) }}
+                  </button>
+                {% else %}
+                  <span></span>
+                {% endif %}
+              {% endfor %}
+            {% endfor %}
+          </div>
+
+          <div class="flex justify-between mt-8">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="clearAll()">✕ Limpar</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="selectAll()">☑ Todos</button>
+          </div>
+        </div>
+
+        <!-- Configurações de geração -->
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Máx. de jogos</label>
+            <input class="form-control" type="number" name="max_games"
+                   min="1" max="5000" value="{{ max_games }}">
+            <div class="text-muted text-sm mt-8">Máx: 5.000</div>
+          </div>
+        </div>
+
+        <!-- Filtro moldura/miolo -->
+        <div class="form-group">
+          <label class="form-label" style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" name="use_filter" value="1"
+                   id="chk-filter" {% if use_filter %}checked{% endif %}
+                   onchange="toggleFilter()">
+            Filtro de Moldura/Miolo
+          </label>
+
+          <div id="filter-panel" style="display:{% if use_filter %}block{% else %}none{% endif %};
+               background:var(--elevated); border-radius:8px; padding:12px; margin-top:8px;">
+            <div class="text-muted text-sm mb-8">
+              Manter apenas jogos com N dezenas da <strong>moldura</strong>:
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label text-sm">Mínimo moldura</label>
+                <input class="form-control" type="number" name="min_moldura"
+                       min="0" max="{{ k }}" value="{{ min_m }}">
+              </div>
+              <div class="form-group">
+                <label class="form-label text-sm">Máximo moldura</label>
+                <input class="form-control" type="number" name="max_moldura"
+                       min="0" max="{{ k }}" value="{{ max_m }}">
+              </div>
+            </div>
+            <div class="text-muted text-sm">
+              Ex: entre <strong>9</strong> e <strong>10</strong> dezenas da moldura por jogo.
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-full btn-lg">
+          🔢 &nbsp; COMBINAR
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Painel direito: resultados -->
+  <div>
+
+    {% if combos %}
+
+    <!-- Resumo e probabilidades -->
+    <div class="grid-4 mb-16" style="grid-template-columns:1fr 1fr;">
+      <div class="stat-card">
+        <div class="stat-label">Combinações geradas</div>
+        <div class="stat-value">{{ combos|length }}</div>
+        <div class="stat-sub">
+          de {{ "{:,}".format(total_possible).replace(",",".") }} possíveis
+          {% if truncated %}<span class="badge badge-blue" style="font-size:10px;">amostra</span>{% endif %}
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Investimento</div>
+        <div class="stat-value" style="font-size:18px;color:var(--danger)">
+          R$ {{ "%.2f"|format(cfg.price * combos|length) }}
+        </div>
+        <div class="stat-sub">R$ {{ "%.2f"|format(cfg.price) }}/jogo</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Prob. 1 jogo vencer</div>
+        <div class="stat-value" style="font-size:14px;color:var(--info)">{{ odds_single }}</div>
+        <div class="stat-sub">qualquer prêmio</div>
+      </div>
+      <div class="stat-card {% if prob_n > 0.01 %}success{% endif %}">
+        <div class="stat-label">Prob. ao menos 1 vencer</div>
+        <div class="stat-value" style="font-size:14px;color:var(--success)">
+          {{ "%.2f"|format(prob_n * 100) }}%
+        </div>
+        <div class="stat-sub">{{ odds_n }} · {{ combos|length }} jogo(s)</div>
+      </div>
+    </div>
+
+    <!-- Ação: salvar -->
+    <form method="POST" id="save-form" class="mb-16">
+      <input type="hidden" name="action" value="save">
+      <input type="hidden" name="lottery_type" value="{{ selected_lt }}">
+      <input type="hidden" name="dezenas" value="{{ selected_nums_str }}">
+      <input type="hidden" name="combos_data" id="combos-data"
+             value="{{ combos_data_str }}">
+      <button type="submit" class="btn btn-success w-full"
+              onclick="return confirm('Salvar {{ combos|length }} jogos na lista?')">
+        💾 Salvar {{ combos|length }} Jogo(s) na Lista
+      </button>
+    </form>
+
+    <!-- Tabela de combinações -->
+    <div class="card" style="padding:0;">
+      <div style="padding:14px 20px 10px; font-size:13px; font-weight:600;
+                  text-transform:uppercase; letter-spacing:.8px; color:var(--muted);">
+        Jogos Gerados{% if combos|length > 200 %} (mostrando 200 de {{ combos|length }}){% endif %}
+      </div>
+      <div class="table-wrap" style="border:none; max-height:520px; overflow-y:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Dezenas</th>
+              <th style="white-space:nowrap">🔵 Moldura</th>
+              <th style="white-space:nowrap">🟡 Miolo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for combo in combos[:200] %}
+            {% set stats = combo_stats(combo, moldura) %}
+            <tr>
+              <td class="text-muted text-sm">{{ loop.index }}</td>
+              <td>
+                <div class="balls">
+                  {% for n in combo %}
+                    <span class="ball ball-sm"
+                      style="background:{% if n in moldura %}rgba(59,130,246,0.85){% else %}rgba(245,166,35,0.85){% endif %};
+                             color:#fff; font-weight:700;">
+                      {{ "%02d"|format(n) }}
+                    </span>
+                  {% endfor %}
+                </div>
+              </td>
+              <td>
+                <span class="badge" style="background:rgba(59,130,246,.2);color:var(--info);">
+                  {{ stats[0] }}
+                </span>
+              </td>
+              <td>
+                <span class="badge" style="background:rgba(245,166,35,.2);color:var(--accent);">
+                  {{ stats[1] }}
+                </span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% else %}
+    <div class="card" style="height:400px;display:flex;align-items:center;justify-content:center;">
+      <div class="empty-state">
+        <div class="icon">🔢</div>
+        <p>
+          Selecione as dezenas no grid ao lado<br>
+          e clique em <strong>Combinar</strong>.<br>
+          <span class="text-muted text-sm">
+            🔵 Moldura = borda do cartão &nbsp;·&nbsp; 🟡 Miolo = centro
+          </span>
+        </p>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── selected numbers state ──────────────────────────────────────────────────
+let selected = new Set([
+  {% for n in selected_nums %}{{ n }},{% endfor %}
+]);
+
+function toggleNum(n) {
+  if (selected.has(n)) {
+    selected.delete(n);
+  } else {
+    selected.add(n);
+  }
+  renderGrid();
+}
+
+function clearAll() {
+  selected.clear();
+  renderGrid();
+}
+
+function selectAll() {
+  document.querySelectorAll('.grid-ball').forEach(b => selected.add(+b.dataset.num));
+  renderGrid();
+}
+
+function renderGrid() {
+  document.querySelectorAll('.grid-ball').forEach(btn => {
+    const n = +btn.dataset.num;
+    btn.classList.remove('sel', 'mol', 'mio');
+    if (selected.has(n))       btn.classList.add('sel');
+    else if (btn.dataset.moldura) btn.classList.add('mol');
+    else                       btn.classList.add('mio');
+  });
+  document.getElementById('hidden-dezenas').value = [...selected].sort((a,b)=>a-b).join(' ');
+  document.getElementById('sel-count').textContent =
+    `(${selected.size} selecionada(s))`;
+}
+
+// mark data-moldura on page load
+document.addEventListener('DOMContentLoaded', () => {
+  const moldura = new Set([{% for n in moldura %}{{ n }},{% endfor %}]);
+  document.querySelectorAll('.grid-ball').forEach(btn => {
+    if (moldura.has(+btn.dataset.num)) btn.dataset.moldura = '1';
+  });
+  renderGrid();
+});
+
+function toggleFilter() {
+  const panel = document.getElementById('filter-panel');
+  panel.style.display = document.getElementById('chk-filter').checked ? 'block' : 'none';
+}
+
+// ── save form: encode combos as text ────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const saveForm = document.getElementById('save-form');
+  if (!saveForm) return;
+  const combosData = document.getElementById('combos-data');
+  // combos_data is already set via Jinja; just ensure it's correct format
+  combosData.value = combosData.value
+    .replace(/[()]/g, '')
+    .replace(/,/g, ' ');
+});
+</script>
+
+<style>
+/* Grid number buttons */
+.grid-ball {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+  background: var(--elevated);
+  color: var(--text);
+  padding: 0;
+  line-height: 1;
+}
+.grid-ball:hover { transform: scale(1.1); }
+.grid-ball.mol {
+  background: rgba(59,130,246,.18);
+  border-color: var(--info);
+  color: var(--info);
+}
+.grid-ball.mio {
+  background: rgba(245,166,35,.12);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.grid-ball.sel {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+  transform: scale(1.08);
+}
+</style>
+{% endblock %}
