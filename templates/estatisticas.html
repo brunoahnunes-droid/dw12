@@ -73,6 +73,23 @@
     </div>
 
     <div class="card">
+      <div class="card-title">⏳ Maiores Atrasos</div>
+      <div class="text-muted text-sm mb-8">Números que não saem há mais concursos</div>
+      <div class="balls" style="gap:6px; flex-wrap:wrap;">
+        {% for item in delay_table[:10] %}
+          <div style="text-align:center;">
+            <span class="ball ball-sm"
+              style="background:{% if item.class == 'muito_atrasado' %}#dc2626{% elif item.class == 'atrasado' %}#f97316{% else %}var(--elevated){% endif %};
+                     color:{% if item.class in ['muito_atrasado','atrasado'] %}#fff{% else %}var(--text){% endif %};">
+              {{ "%02d"|format(item.num) }}
+            </span>
+            <div class="text-muted" style="font-size:10px; margin-top:2px;">{{ item.delay }}c</div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
       <a href="{{ url_for('gerar', lt=selected_lt) }}" class="btn btn-primary w-full">
         🎲 Gerar com Estratégia
       </a>
@@ -137,6 +154,60 @@
         </table>
       </div>
     </div>
+
+    {% if n_draws > 0 %}
+    <div class="card" style="padding:0; margin-top:16px;">
+      <div style="padding:16px 20px 12px; font-size:13px; font-weight:600;
+                  text-transform:uppercase; letter-spacing:.8px; color:var(--muted);">
+        Ranking de Atraso (concursos sem sair)
+      </div>
+      <div class="table-wrap" style="border:none; max-height:360px; overflow-y:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Número</th>
+              <th>Atraso</th>
+              <th>Situação</th>
+              <th>Barra</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in delay_table %}
+            <tr>
+              <td>
+                <span class="ball ball-sm"
+                  style="background:{% if item.class == 'muito_atrasado' %}#dc2626{% elif item.class == 'atrasado' %}#f97316{% elif item.class == 'adiantado' %}var(--success){% else %}var(--elevated){% endif %};
+                         color:{% if item.class in ['muito_atrasado','atrasado','adiantado'] %}#fff{% else %}var(--text){% endif %};">
+                  {{ "%02d"|format(item.num) }}
+                </span>
+              </td>
+              <td class="font-bold">{{ item.delay }}</td>
+              <td>
+                {% if item.class == 'muito_atrasado' %}
+                  <span class="badge" style="background:#dc2626;color:#fff;">🔴 Muito atrasado</span>
+                {% elif item.class == 'atrasado' %}
+                  <span class="badge" style="background:#f97316;color:#fff;">🟠 Atrasado</span>
+                {% elif item.class == 'adiantado' %}
+                  <span class="badge badge-green">🟢 Adiantado</span>
+                {% else %}
+                  <span class="badge badge-gray">⚪ Normal</span>
+                {% endif %}
+              </td>
+              <td style="min-width:80px;">
+                <div class="progress-bar" style="width:80px;">
+                  <div class="progress-fill"
+                    style="width:{{ [item.delay / (avg_delay * 3) * 100, 100]|min|int }}%;
+                           background:{% if item.class == 'muito_atrasado' %}#dc2626{% elif item.class == 'atrasado' %}#f97316{% else %}var(--muted){% endif %}">
+                  </div>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
 
     {% else %}
     <div class="card" style="height:400px; display:flex; align-items:center; justify-content:center;">

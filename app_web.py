@@ -554,7 +554,8 @@ def estatisticas():
     selected_lt_name = request.args.get("lt", "Mega-Sena")
     lt = resolve_lt(selected_lt_name)
 
-    from services.statistics import number_frequency, hot_numbers, cold_numbers, chart_data
+    from services.statistics import (number_frequency, hot_numbers, cold_numbers,
+                                     chart_data, number_delay, delay_classification)
 
     draws = store.get_draws(lt)
     freq  = number_frequency(draws, lt)
@@ -567,6 +568,17 @@ def estatisticas():
     # per-number table (sorted by freq desc)
     freq_table = sorted(freq.items(), key=lambda x: -x[1])
 
+    delay = number_delay(draws, lt)
+    avg_delay = sum(delay.values()) / len(delay) if delay else 1
+
+    delay_table = []
+    for num, d in sorted(delay.items(), key=lambda x: -x[1]):
+        delay_table.append({
+            'num': num,
+            'delay': d,
+            'class': delay_classification(d, avg_delay),
+        })
+
     return render_template("estatisticas.html", active="estatisticas",
                            selected_lt=selected_lt_name,
                            cfg=cfg_context(lt),
@@ -574,6 +586,41 @@ def estatisticas():
                            hot=hot, cold=cold,
                            chart=chart,
                            freq_table=freq_table,
+                           delay_table=delay_table,
+                           avg_delay=avg_delay,
+                           **common_ctx())
+
+
+# ─── Pares Frequentes ────────────────────────────────────────────────────────
+
+@app.route("/pares")
+def pares():
+    from services.pairs import pair_frequency, top_pairs, bottom_pairs
+
+    selected_lt_name = request.args.get("lt", "Mega-Sena")
+    lt = resolve_lt(selected_lt_name)
+
+    draws = store.get_draws(lt)
+    n_draws = len(draws)
+
+    freq = pair_frequency(draws, lt) if draws else {}
+    top = top_pairs(freq, 30) if freq else []
+    bottom = bottom_pairs(freq, 20) if freq else []
+
+    # Número mais "conectado" (participa do maior número de pares frequentes)
+    num_score: dict = {}
+    for (a, b), cnt in top:
+        num_score[a] = num_score.get(a, 0) + cnt
+        num_score[b] = num_score.get(b, 0) + cnt
+    top_connected = sorted(num_score.items(), key=lambda x: -x[1])[:10]
+
+    return render_template("pares.html", active="pares",
+                           selected_lt=selected_lt_name,
+                           cfg=cfg_context(lt),
+                           n_draws=n_draws,
+                           top_pairs=top,
+                           bottom_pairs=bottom,
+                           top_connected=top_connected,
                            **common_ctx())
 
 
@@ -582,8 +629,8 @@ def estatisticas():
 @app.route("/combinar", methods=["GET", "POST"])
 def combinar():
     from services.combinator import (
-        compute_moldura, build_grid, combine,
-        apply_moldura_filter, combo_stats, grid_cols,
+        compute_moldura, build_grid, combine_groups,
+        combo_stats, grid_cols,
     )
     from services.probability import hyper_at_least, odds_string
     import math
@@ -596,64 +643,66 @@ def combinar():
 
     moldura, miolo = compute_moldura(lt)
     grid           = build_grid(lt)
-    k              = cfg_lt.draw_count   # numbers per game
+    k              = cfg_lt.draw_count
 
-    # derive min/max moldura sensible defaults based on lottery
-    moldura_size = len(moldura)
-    default_min_m = max(1, k - len(miolo))         # can't pick more miolo than exist
-    default_max_m = min(k, moldura_size)
+    # sensible defaults: for Lotofácil 9 mol + 6 mio = 15
+    default_k_mol = max(1, round(k * len(moldura) / (len(moldura) + len(miolo))))
+    default_k_mio = k - default_k_mol
 
-    action        = request.form.get("action", "")
-    combos_raw    = []
-    filtered      = []
+    action         = request.form.get("action", "")
+    combos         = []
     total_possible = 0
-    truncated     = False
-    selected_nums  = []
+    truncated      = False
+    sel_mol        = []   # selected moldura numbers
+    sel_mio        = []   # selected miolo numbers
+    k_mol          = int(request.form.get("k_mol", default_k_mol))
+    k_mio          = int(request.form.get("k_mio", default_k_mio))
     max_games      = 500
-    min_m          = max(0, round(k * 0.6))
-    max_m          = k
-    use_filter     = False
     prob_single    = 0.0
     prob_n         = 0.0
 
     if action == "combine":
-        nums_str      = request.form.get("dezenas", "").strip()
-        selected_nums = [int(x) for x in nums_str.split() if x.strip().isdigit()]
-        max_games     = max(1, min(5000, int(request.form.get("max_games", 500))))
-        min_m         = int(request.form.get("min_moldura", min_m))
-        max_m         = int(request.form.get("max_moldura", max_m))
-        use_filter    = request.form.get("use_filter") == "1"
+        mol_str   = request.form.get("mol_dezenas", "").strip()
+        mio_str   = request.form.get("mio_dezenas", "").strip()
+        sel_mol   = [int(x) for x in mol_str.split() if x.isdigit()]
+        sel_mio   = [int(x) for x in mio_str.split() if x.isdigit()]
+        k_mol     = max(0, min(k, int(request.form.get("k_mol", default_k_mol))))
+        k_mio     = k - k_mol
+        max_games = max(1, min(5000, int(request.form.get("max_games", 500))))
 
-        if len(selected_nums) < k:
-            flash(f"Selecione ao menos {k} dezenas.", "error")
+        err = None
+        if len(sel_mol) < k_mol:
+            err = f"Selecione ao menos {k_mol} dezenas da moldura."
+        elif len(sel_mio) < k_mio:
+            err = f"Selecione ao menos {k_mio} dezenas do miolo/núcleo."
+
+        if err:
+            flash(err, "error")
         else:
-            combos_raw, total_possible, truncated = combine(selected_nums, k, max_games)
-            filtered = apply_moldura_filter(combos_raw, moldura, min_m, max_m) if use_filter else combos_raw
-
-            # Probability calculations
+            combos, total_possible, truncated = combine_groups(
+                sel_mol, sel_mio, k_mol, k_mio, max_games
+            )
             N = cfg_lt.number_range[1] - cfg_lt.number_range[0] + 1
-            min_prize_matches = cfg_lt.prize_tiers[-1].min_matches if cfg_lt.prize_tiers else k
-            prob_single = hyper_at_least(N, k, k, min_prize_matches)
-            n = len(filtered)
-            prob_n = 1 - (1 - prob_single) ** n if n > 0 else 0.0
+            min_prize = cfg_lt.prize_tiers[-1].min_matches if cfg_lt.prize_tiers else k
+            prob_single = hyper_at_least(N, k, k, min_prize)
+            prob_n = 1 - (1 - prob_single) ** len(combos) if combos else 0.0
 
     elif action == "save":
-        nums_str      = request.form.get("dezenas", "").strip()
-        selected_nums = [int(x) for x in nums_str.split() if x.strip().isdigit()]
-        combos_str    = request.form.get("combos_data", "")
+        lt_name   = request.form.get("lottery_type", selected_lt_name)
+        lt_save   = resolve_lt(lt_name)
+        cfg_save  = LOTTERY_CONFIGS[lt_save]
+        k_save    = cfg_save.draw_count
+        combos_str = request.form.get("combos_data", "")
         saved = 0
         for line in combos_str.strip().splitlines():
             nums = [int(x) for x in line.split() if x.isdigit()]
-            if len(nums) == k:
-                t = Ticket.create(lt, nums)
-                store.add_ticket(t)
+            if len(nums) == k_save:
+                store.add_ticket(Ticket.create(lt_save, nums))
                 saved += 1
         flash(f"{saved} jogo(s) salvos!", "success")
         return redirect(url_for("jogos"))
 
-    # Pre-encode combos as "01 02 03 ...\n" lines for the save form
-    combos_data_str = "\n".join(" ".join(f"{n:02d}" for n in c) for c in filtered)
-
+    combos_data_str = "\n".join(" ".join(f"{n:02d}" for n in c) for c in combos)
     n_cols = grid_cols(lt)
 
     return render_template("combinar.html", active="combinar",
@@ -664,16 +713,17 @@ def combinar():
                            moldura=moldura,
                            miolo=miolo,
                            k=k,
-                           combos=filtered,
+                           k_mol=k_mol,
+                           k_mio=k - k_mol,
+                           combos=combos,
                            combos_data_str=combos_data_str,
                            total_possible=total_possible,
                            truncated=truncated,
-                           selected_nums=set(selected_nums),
-                           selected_nums_str=" ".join(str(n) for n in sorted(selected_nums)),
+                           sel_mol=set(sel_mol),
+                           sel_mio=set(sel_mio),
+                           sel_mol_str=" ".join(str(n) for n in sorted(sel_mol)),
+                           sel_mio_str=" ".join(str(n) for n in sorted(sel_mio)),
                            max_games=max_games,
-                           min_m=min_m,
-                           max_m=max_m,
-                           use_filter=use_filter,
                            prob_single=prob_single,
                            prob_n=prob_n,
                            odds_single=odds_string(prob_single),

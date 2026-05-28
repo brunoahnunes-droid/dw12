@@ -55,6 +55,46 @@ def chart_data(freq: Dict[int, int]) -> dict:
     }
 
 
+def number_delay(draws, lt):
+    """
+    Retorna dict {numero: atraso} onde atraso = concursos desde o último sorteio.
+    draws deve estar ordenado do mais antigo para o mais recente.
+    """
+    cfg = LOTTERY_CONFIGS[lt]
+    lo, hi = cfg.number_range
+    last_seen = {}  # num -> índice do último sorteio
+
+    for i, d in enumerate(draws):
+        if d.lottery_type != lt:
+            continue
+        for n in d.numbers:
+            last_seen[n] = i
+        if d.numbers2:
+            for n in d.numbers2:
+                last_seen[n] = i
+
+    total = len([d for d in draws if d.lottery_type == lt])
+    delay = {}
+    for n in range(lo, hi + 1):
+        if n in last_seen:
+            delay[n] = total - 1 - last_seen[n]
+        else:
+            delay[n] = total  # nunca saiu
+    return delay
+
+
+def delay_classification(delay_val, avg_delay):
+    """Classifica o atraso: 'normal', 'atrasado', 'muito_atrasado', 'adiantado'."""
+    if delay_val <= avg_delay * 0.5:
+        return 'adiantado'
+    elif delay_val <= avg_delay * 1.5:
+        return 'normal'
+    elif delay_val <= avg_delay * 2.5:
+        return 'atrasado'
+    else:
+        return 'muito_atrasado'
+
+
 def weighted_picks(pool: List[int], weights: List[float], k: int) -> List[int]:
     """Pick k unique numbers from pool using per-number weights (without replacement)."""
     if k >= len(pool):
