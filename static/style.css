@@ -214,6 +214,7 @@ td { padding: 12px 14px; vertical-align: middle; }
 .toast.error   { border-color: var(--danger); }
 @keyframes slideIn { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:none; } }
 @keyframes fadeOut { to { opacity:0; transform:translateX(40px); } }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Info rows ───────────────────────────────────────────────── */
 .info-row { display: flex; justify-content: space-between; align-items: center;

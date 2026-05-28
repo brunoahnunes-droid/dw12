@@ -153,6 +153,38 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+/* ── Loading overlay ─────────────────────────────────────────── */
+const _overlay = () => document.getElementById('loading-overlay');
+
+function showLoading(msg) {
+  const el = _overlay();
+  if (!el) return;
+  const msgEl = document.getElementById('loading-msg');
+  if (msgEl) msgEl.textContent = msg || 'Aguarde…';
+  el.style.display = 'flex';
+}
+
+function hideLoading() {
+  const el = _overlay();
+  if (el) el.style.display = 'none';
+}
+
+// Show loading on any form submit (except ones marked data-no-load)
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('form:not([data-no-load])').forEach(form => {
+    form.addEventListener('submit', () => {
+      const action = form.querySelector('[name="action"]')?.value;
+      const msgs = {
+        'combine': 'Gerando combinações…',
+        'save':    'Salvando jogos…',
+        'conferir': 'Conferindo sorteio…',
+        'importar': 'Importando resultados…',
+      };
+      showLoading(msgs[action] || 'Processando…');
+    });
+  });
+});
+
 /* ── Picks slider display ────────────────────────────────────── */
 function syncSlider(sliderId, labelId, suffix = ' números') {
   const s = document.getElementById(sliderId);

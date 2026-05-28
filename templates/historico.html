@@ -12,7 +12,8 @@
 <!-- Painel de importação -->
 <div id="import-panel" style="display:none;" class="card mb-16" style="border-color:var(--info)">
   <div class="card-title">Importar Resultados da API Caixa</div>
-  <form method="POST" action="{{ url_for('importar_historico') }}">
+  <form method="POST" action="{{ url_for('importar_historico') }}"
+        onsubmit="showLoading('Baixando resultados da Caixa…')">
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Tipo de Jogo</label>

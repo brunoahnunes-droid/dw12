@@ -11,7 +11,7 @@
     <div class="card">
       <div class="card-title">Configuração</div>
       <form method="POST" id="combo-form">
-        <input type="hidden" name="action"       value="combine">
+        <input type="hidden" name="action" id="hid-action" value="combine">
         <input type="hidden" name="mol_dezenas"  id="hid-mol" value="{{ sel_mol_str }}">
         <input type="hidden" name="mio_dezenas"  id="hid-mio" value="{{ sel_mio_str }}">
         <input type="hidden" name="fixed_mol"    id="hid-fixed-mol" value="{{ fixed_mol_str }}">
@@ -20,7 +20,8 @@
         <!-- Tipo de jogo -->
         <div class="form-group">
           <label class="form-label">Tipo de Jogo</label>
-          <select class="form-control" name="lottery_type" onchange="this.form.submit()">
+          <select class="form-control" name="lottery_type"
+                  onchange="document.getElementById('hid-action').value=''; this.form.submit()">
             {% for lt_val, lt_label in lt_choices %}
               <option value="{{ lt_val }}" {% if lt_val == selected_lt %}selected{% endif %}>
                 {{ lt_label }}

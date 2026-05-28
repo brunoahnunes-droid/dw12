@@ -16,6 +16,16 @@
   {% endfor %}
 {% endwith %}
 
+<!-- Loading overlay -->
+<div id="loading-overlay" style="display:none;position:fixed;inset:0;z-index:99999;
+     background:rgba(11,15,26,.75);backdrop-filter:blur(3px);
+     align-items:center;justify-content:center;flex-direction:column;gap:16px;">
+  <div style="width:48px;height:48px;border:4px solid var(--border);
+              border-top-color:var(--accent);border-radius:50%;
+              animation:spin .8s linear infinite;"></div>
+  <div id="loading-msg" style="color:var(--muted);font-size:13px;">Aguarde…</div>
+</div>
+
 <!-- Sidebar -->
 <aside class="sidebar">
   <div class="sidebar-logo">

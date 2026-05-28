@@ -288,6 +288,7 @@ async function buscarOnline() {
   const btn     = document.getElementById('btn-buscar');
   btn.textContent = '⏳';
   btn.disabled = true;
+  showLoading('Buscando resultado na Caixa…');
   try {
     const url = `/api/resultado?lt=${encodeURIComponent(lt)}&concurso=${encodeURIComponent(contest)}`;
     const res  = await fetch(url);
@@ -305,6 +306,7 @@ async function buscarOnline() {
   } catch(e) {
     showToast('Erro ao buscar na API da Caixa', 'error');
   } finally {
+    hideLoading();
     btn.textContent = '🌐 Buscar';
     btn.disabled = false;
   }
