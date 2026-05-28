@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Pares Frequentes · Mega do Carlão{% endblock %}
+{% block page_title %}Análise de Pares{% endblock %}
+{% block page_sub %}Números que mais saem juntos no histórico de sorteios{% endblock %}
+
+{% block content %}
+<div class="page-cols">
+
+  <!-- Painel esquerdo -->
+  <div>
+    <div class="card">
+      <div class="card-title">Tipo de Jogo</div>
+      <form method="GET">
+        <div class="form-group">
+          <select class="form-control" name="lt" onchange="this.form.submit()">
+            {% for lt_val, lt_label in lt_choices %}
+              <option value="{{ lt_val }}" {% if lt_val == selected_lt %}selected{% endif %}>
+                {{ lt_label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Resumo</div>
+      <div class="info-row">
+        <span class="key">Sorteios analisados</span>
+        <span class="val {% if n_draws > 0 %}text-accent{% endif %}">{{ n_draws }}</span>
+      </div>
+      <div class="info-row">
+        <span class="key">Pares possíveis</span>
+        {% set universe = cfg.hi - cfg.lo + 1 %}
+        <span class="val">{{ (universe * (universe-1) // 2) }}</span>
+      </div>
+      <div class="info-row" style="border:none">
+        <span class="key">Pares encontrados</span>
+        <span class="val">{{ top_pairs|length + bottom_pairs|length }}</span>
+      </div>
+    </div>
+
+    {% if n_draws > 0 and top_connected %}
+    <div class="card">
+      <div class="card-title">🌟 Números mais conectados</div>
+      <div class="text-muted text-sm mb-8">Participam dos pares mais frequentes</div>
+      <div class="balls" style="flex-wrap:wrap; gap:6px;">
+        {% for num, score in top_connected %}
+          <div style="text-align:center;">
+            <span class="ball ball-sm drawn">{{ "%02d"|format(num) }}</span>
+            <div class="text-muted" style="font-size:10px; margin-top:2px;">{{ score }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if n_draws > 0 %}
+    <div class="card">
+      <a href="{{ url_for('gerar', lt=selected_lt) }}" class="btn btn-primary w-full">
+        🎲 Gerar com Estratégia
+      </a>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Painel direito -->
+  <div>
+    {% if n_draws > 0 %}
+
+    <!-- Top pares -->
+    <div class="card mb-16">
+      <div class="card-title">🤝 Pares Mais Frequentes (Top 30)</div>
+      <div class="table-wrap" style="max-height:400px; overflow-y:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Par</th>
+              <th>Saíram juntos</th>
+              <th>Frequência</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% set max_cnt = top_pairs[0][1] if top_pairs else 1 %}
+            {% for (a, b), cnt in top_pairs %}
+            <tr>
+              <td class="text-muted text-sm">{{ loop.index }}</td>
+              <td>
+                <div class="balls">
+                  <span class="ball ball-sm drawn">{{ "%02d"|format(a) }}</span>
+                  <span class="text-muted" style="font-size:11px;">+</span>
+                  <span class="ball ball-sm drawn">{{ "%02d"|format(b) }}</span>
+                </div>
+              </td>
+              <td class="font-bold">{{ cnt }}×</td>
+              <td style="min-width:100px;">
+                <div class="progress-bar" style="width:100px;">
+                  <div class="progress-fill"
+                       style="width:{{ (cnt / max_cnt * 100)|int }}%;
+                              background:var(--accent);">
+                  </div>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Pares raros -->
+    <div class="card" style="padding:0;">
+      <div style="padding:16px 20px 12px; font-size:13px; font-weight:600;
+                  text-transform:uppercase; letter-spacing:.8px; color:var(--muted);">
+        🚫 Pares Mais Raros (evitar)
+      </div>
+      <div class="table-wrap" style="border:none; max-height:320px; overflow-y:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Par</th>
+              <th>Saíram juntos</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for (a, b), cnt in bottom_pairs %}
+            <tr>
+              <td class="text-muted text-sm">{{ loop.index }}</td>
+              <td>
+                <div class="balls">
+                  <span class="ball ball-sm" style="background:var(--info);color:#fff;">
+                    {{ "%02d"|format(a) }}
+                  </span>
+                  <span class="text-muted" style="font-size:11px;">+</span>
+                  <span class="ball ball-sm" style="background:var(--info);color:#fff;">
+                    {{ "%02d"|format(b) }}
+                  </span>
+                </div>
+              </td>
+              <td class="text-muted">{{ cnt }}×</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% else %}
+    <div class="card" style="height:400px;display:flex;align-items:center;justify-content:center;">
+      <div class="empty-state">
+        <div class="icon">🤝</div>
+        <p>Nenhum histórico de sorteios salvo para <strong>{{ cfg.name }}</strong>.<br>
+          <a href="{{ url_for('historico') }}" class="text-accent">Importe resultados</a>
+          para ver os pares frequentes.</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
