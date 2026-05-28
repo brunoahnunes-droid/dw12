@@ -1,19 +1,23 @@
 {% extends "base.html" %}
 {% block title %}Combinador · Mega do Carlão{% endblock %}
-{% block page_title %}Combinador de Dezenas{% endblock %}
-{% block page_sub %}Desdobramento com filtro de moldura e miolo{% endblock %}
+{% block page_title %}Combinador Moldura + Núcleo{% endblock %}
+{% block page_sub %}Gere jogos combinando dezenas da borda e do centro do cartão{% endblock %}
 
 {% block content %}
 <div class="page-cols">
 
-  <!-- Painel esquerdo: configuração -->
+  <!-- ── Painel esquerdo: configuração ────────────────────────────────────── -->
   <div>
     <div class="card">
       <div class="card-title">Configuração</div>
       <form method="POST" id="combo-form">
-        <input type="hidden" name="action" value="combine">
-        <input type="hidden" name="dezenas" id="hidden-dezenas" value="{{ selected_nums_str }}">
+        <input type="hidden" name="action"       value="combine">
+        <input type="hidden" name="mol_dezenas"  id="hid-mol" value="{{ sel_mol_str }}">
+        <input type="hidden" name="mio_dezenas"  id="hid-mio" value="{{ sel_mio_str }}">
+        <input type="hidden" name="fixed_mol"    id="hid-fixed-mol" value="{{ fixed_mol_str }}">
+        <input type="hidden" name="fixed_mio"    id="hid-fixed-mio" value="{{ fixed_mio_str }}">
 
+        <!-- Tipo de jogo -->
         <div class="form-group">
           <label class="form-label">Tipo de Jogo</label>
           <select class="form-control" name="lottery_type" onchange="this.form.submit()">
@@ -25,192 +29,315 @@
           </select>
         </div>
 
-        <!-- Info do jogo -->
-        <div class="card" style="background:var(--elevated); margin:0 0 16px; padding:12px 16px;">
-          <div class="info-row">
-            <span class="key">Intervalo</span>
-            <span class="val">{{ cfg.lo }}–{{ cfg.hi }}</span>
+        <!-- Info rápida -->
+        <div class="card" style="background:var(--elevated);margin:0 0 14px;padding:10px 14px;">
+          <div class="flex justify-between">
+            <span class="text-muted text-sm">Dezenas por jogo</span>
+            <strong>{{ k }}</strong>
           </div>
-          <div class="info-row">
-            <span class="key">Dezenas por jogo</span>
-            <span class="val">{{ k }}</span>
-          </div>
-          <div class="info-row">
-            <span class="key">Moldura</span>
-            <span class="val" style="color:var(--info)">{{ moldura|length }} números</span>
-          </div>
-          <div class="info-row" style="border:none">
-            <span class="key">Miolo</span>
-            <span class="val" style="color:var(--accent)">{{ miolo|length }} números</span>
-          </div>
-        </div>
-
-        <!-- Grid clicável -->
-        <div class="form-group">
-          <label class="form-label">
-            Selecione as dezenas
-            <span class="text-muted text-sm" id="sel-count">
-              ({{ selected_nums|length }} selecionada(s))
-            </span>
-          </label>
-
-          <!-- Legenda -->
-          <div class="flex gap-8 mb-8" style="flex-wrap:wrap; font-size:11px;">
-            <span style="display:flex;align-items:center;gap:4px;">
-              <span style="width:14px;height:14px;border-radius:50%;background:rgba(59,130,246,.25);border:1.5px solid var(--info);display:inline-block;"></span>
-              Moldura
-            </span>
-            <span style="display:flex;align-items:center;gap:4px;">
-              <span style="width:14px;height:14px;border-radius:50%;background:rgba(245,166,35,.15);border:1.5px solid var(--accent);display:inline-block;"></span>
-              Miolo
-            </span>
-            <span style="display:flex;align-items:center;gap:4px;">
-              <span style="width:14px;height:14px;border-radius:50%;background:var(--success);border:1.5px solid var(--success);display:inline-block;"></span>
-              Selecionado
-            </span>
-          </div>
-
-          <div id="num-grid" style="display:grid; grid-template-columns:repeat({{ n_cols }}, 1fr); gap:4px;">
-            {% for row in grid %}
-              {% for num in row %}
-                {% if num is not none %}
-                  {% set is_mol = num in moldura %}
-                  {% set is_sel = num in selected_nums %}
-                  <button type="button"
-                    class="grid-ball {% if is_sel %}sel{% elif is_mol %}mol{% else %}mio{% endif %}"
-                    data-num="{{ num }}"
-                    onclick="toggleNum({{ num }})">
-                    {{ "%02d"|format(num) }}
-                  </button>
-                {% else %}
-                  <span></span>
-                {% endif %}
-              {% endfor %}
-            {% endfor %}
-          </div>
-
           <div class="flex justify-between mt-8">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="clearAll()">✕ Limpar</button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="selectAll()">☑ Todos</button>
+            <span style="color:var(--info);font-size:13px;">🔵 Moldura</span>
+            <strong style="color:var(--info);">{{ moldura|length }} números</strong>
+          </div>
+          <div class="flex justify-between mt-4">
+            <span style="color:var(--accent);font-size:13px;">🟡 Núcleo</span>
+            <strong style="color:var(--accent);">{{ miolo|length }} números</strong>
           </div>
         </div>
 
-        <!-- Configurações de geração -->
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Máx. de jogos</label>
-            <input class="form-control" type="number" name="max_games"
-                   min="1" max="5000" value="{{ max_games }}">
-            <div class="text-muted text-sm mt-8">Máx: 5.000</div>
-          </div>
-        </div>
-
-        <!-- Filtro moldura/miolo -->
+        <!-- Quantas de cada por jogo -->
         <div class="form-group">
-          <label class="form-label" style="display:flex;align-items:center;gap:8px;">
-            <input type="checkbox" name="use_filter" value="1"
-                   id="chk-filter" {% if use_filter %}checked{% endif %}
-                   onchange="toggleFilter()">
-            Filtro de Moldura/Miolo
-          </label>
-
-          <div id="filter-panel" style="display:{% if use_filter %}block{% else %}none{% endif %};
-               background:var(--elevated); border-radius:8px; padding:12px; margin-top:8px;">
-            <div class="text-muted text-sm mb-8">
-              Manter apenas jogos com N dezenas da <strong>moldura</strong>:
+          <label class="form-label">Dezenas por jogo</label>
+          <div class="form-row" style="gap:8px;">
+            <div class="form-group" style="margin:0;">
+              <label class="form-label text-sm" style="color:var(--info);">🔵 Da Moldura</label>
+              <input class="form-control" type="number" name="k_mol" id="k-mol"
+                     min="0" max="{{ k }}" value="{{ k_mol }}"
+                     oninput="syncKMio({{ k }})">
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label text-sm">Mínimo moldura</label>
-                <input class="form-control" type="number" name="min_moldura"
-                       min="0" max="{{ k }}" value="{{ min_m }}">
-              </div>
-              <div class="form-group">
-                <label class="form-label text-sm">Máximo moldura</label>
-                <input class="form-control" type="number" name="max_moldura"
-                       min="0" max="{{ k }}" value="{{ max_m }}">
-              </div>
-            </div>
-            <div class="text-muted text-sm">
-              Ex: entre <strong>9</strong> e <strong>10</strong> dezenas da moldura por jogo.
+            <div class="form-group" style="margin:0;">
+              <label class="form-label text-sm" style="color:var(--accent);">🟡 Do Núcleo</label>
+              <input class="form-control" type="number" id="k-mio-display"
+                     value="{{ k_mio }}" readonly style="opacity:.7;">
+              <div class="text-muted text-sm mt-4">calculado automaticamente</div>
             </div>
           </div>
+          <div class="text-muted text-sm mt-8" id="total-preview">
+            <!-- filled by JS -->
+          </div>
         </div>
+
+        <!-- Máximo de jogos -->
+        <div class="form-group">
+          <label class="form-label">Máximo de jogos a gerar</label>
+          <input class="form-control" type="number" name="max_games"
+                 min="1" max="5000" value="{{ max_games }}">
+          <div class="text-muted text-sm mt-4">Máx: 5.000</div>
+        </div>
+
+        <!-- ── Dezenas Fixas ──────────────────────────────────────────────── -->
+        <details class="filter-block" style="margin-bottom:14px;">
+          <summary class="filter-summary">
+            <span>📌 Dezenas Fixas</span>
+            <span id="fixed-badge" class="badge badge-yellow" style="display:none;"></span>
+          </summary>
+          <div style="padding:10px 0 4px;">
+            <div class="text-muted text-sm mb-8">
+              Números que aparecem em <strong>TODOS</strong> os jogos.<br>
+              Clique uma vez para selecionar, clique de novo para fixar (borda dourada).
+            </div>
+            <div class="text-sm mb-4" style="color:var(--info);">🔵 Fixas na Moldura</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;" id="fixed-mol-mini">
+              {% for row in grid %}{% for num in row %}{% if num is not none and num in moldura %}
+              <button type="button"
+                class="grid-ball-mini {% if num in fixed_mol %}fixed-mol{% elif num in sel_mol %}sel-mol-mini{% endif %}"
+                data-num="{{ num }}" data-group="mol"
+                onclick="toggleFixed({{ num }}, 'mol')">{{ "%02d"|format(num) }}</button>
+              {% endif %}{% endfor %}{% endfor %}
+            </div>
+            <div class="text-sm mt-8 mb-4" style="color:var(--accent);">🟡 Fixas no Núcleo</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;" id="fixed-mio-mini">
+              {% for row in grid %}{% for num in row %}{% if num is not none and num in miolo %}
+              <button type="button"
+                class="grid-ball-mini {% if num in fixed_mio %}fixed-mio{% elif num in sel_mio %}sel-mio-mini{% endif %}"
+                data-num="{{ num }}" data-group="mio"
+                onclick="toggleFixed({{ num }}, 'mio')">{{ "%02d"|format(num) }}</button>
+              {% endif %}{% endfor %}{% endfor %}
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm mt-8"
+                    onclick="clearFixed()">✕ Limpar todas as fixas</button>
+          </div>
+        </details>
+
+        <!-- ── Filtros de Acertabilidade ─────────────────────────────────── -->
+        <details class="filter-block" style="margin-bottom:14px;">
+          <summary class="filter-summary">
+            <span>🎯 Filtros de Acertabilidade</span>
+          </summary>
+          <div style="padding:10px 0 4px;">
+
+            <!-- Filtro Soma -->
+            <div class="form-group" style="margin-bottom:10px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" name="use_soma" id="chk-soma" value="1"
+                       onchange="toggleSomaInputs()"
+                       {% if request.form.get('use_soma') %}checked{% endif %}>
+                <span class="form-label" style="margin:0;">Filtrar por Soma</span>
+              </label>
+              <div id="soma-inputs" style="display:{% if request.form.get('use_soma') %}flex{% else %}none{% endif %};gap:8px;margin-top:6px;">
+                <div style="flex:1;">
+                  <label class="form-label text-sm">Mín</label>
+                  <input class="form-control" type="number" name="soma_min" id="soma-min"
+                         value="{{ request.form.get('soma_min', soma_lo or '') }}">
+                </div>
+                <div style="flex:1;">
+                  <label class="form-label text-sm">Máx</label>
+                  <input class="form-control" type="number" name="soma_max" id="soma-max"
+                         value="{{ request.form.get('soma_max', soma_hi or '') }}">
+                </div>
+              </div>
+              {% if soma_lo %}
+              <div class="text-muted text-sm mt-4">
+                Intervalo sugerido para {{ selected_lt }}: {{ soma_lo }}–{{ soma_hi }}
+                <a href="#" onclick="setSomaSugerida({{ soma_lo }},{{ soma_hi }});return false;"
+                   style="color:var(--accent);text-decoration:none;">[usar]</a>
+              </div>
+              {% endif %}
+            </div>
+
+            <!-- Filtro Paridade -->
+            <div class="form-group" style="margin-bottom:10px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" name="use_paridade" id="chk-paridade" value="1"
+                       onchange="toggleParidadeInputs()"
+                       {% if request.form.get('use_paridade') %}checked{% endif %}>
+                <span class="form-label" style="margin:0;">Filtrar por Paridade (nº de pares)</span>
+              </label>
+              <div id="paridade-inputs" style="display:{% if request.form.get('use_paridade') %}flex{% else %}none{% endif %};gap:8px;margin-top:6px;">
+                <div style="flex:1;">
+                  <label class="form-label text-sm">Mín pares</label>
+                  <input class="form-control" type="number" name="par_min" min="0" max="{{ k }}"
+                         value="{{ request.form.get('par_min', 0) }}">
+                </div>
+                <div style="flex:1;">
+                  <label class="form-label text-sm">Máx pares</label>
+                  <input class="form-control" type="number" name="par_max" min="0" max="{{ k }}"
+                         value="{{ request.form.get('par_max', k) }}">
+                </div>
+              </div>
+            </div>
+
+            <!-- Filtro Consecutivos -->
+            <div class="form-group" style="margin-bottom:4px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" name="use_consecutivos" id="chk-cons" value="1"
+                       onchange="toggleConsInputs()"
+                       {% if request.form.get('use_consecutivos') %}checked{% endif %}>
+                <span class="form-label" style="margin:0;">Filtrar Consecutivos</span>
+              </label>
+              <div id="cons-inputs" style="display:{% if request.form.get('use_consecutivos') %}block{% else %}none{% endif %};margin-top:6px;">
+                <label class="form-label text-sm">Máx consecutivos permitidos</label>
+                <input class="form-control" type="number" name="max_seq" min="1" max="{{ k }}"
+                       value="{{ request.form.get('max_seq', 2) }}" style="width:80px;">
+              </div>
+            </div>
+
+          </div>
+        </details>
 
         <button type="submit" class="btn btn-primary w-full btn-lg">
-          🔢 &nbsp; COMBINAR
+          🔢 &nbsp; GERAR COMBINAÇÕES
         </button>
       </form>
     </div>
-  </div>
-
-  <!-- Painel direito: resultados -->
-  <div>
 
     {% if combos %}
+    <!-- Salvar -->
+    <div class="card">
+      <form method="POST">
+        <input type="hidden" name="action"       value="save">
+        <input type="hidden" name="lottery_type" value="{{ selected_lt }}">
+        <input type="hidden" name="combos_data"  value="{{ combos_data_str }}">
+        <button type="submit" class="btn btn-success w-full"
+                onclick="return confirm('Salvar {{ combos|length }} jogos?')">
+          💾 Salvar {{ combos|length }} Jogo(s) na Lista
+        </button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
 
-    <!-- Resumo e probabilidades -->
-    <div class="grid-4 mb-16" style="grid-template-columns:1fr 1fr;">
+  <!-- ── Painel direito: grids e resultado ─────────────────────────────────── -->
+  <div>
+
+    <!-- Grid Moldura -->
+    <div class="card mb-16">
+      <div class="flex justify-between items-center mb-8">
+        <div class="card-title" style="color:var(--info);margin:0;">
+          🔵 Moldura — Borda do Cartão
+        </div>
+        <div style="font-size:13px;color:var(--info);" id="mol-count">
+          {{ sel_mol|length }} selecionada(s)
+        </div>
+      </div>
+      <div class="text-muted text-sm mb-8">
+        Números da borda ({{ moldura|length }} no total). Clique para selecionar/remover.
+        Clique duplo para marcar como fixa (borda dourada).
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:5px;" id="mol-grid">
+        {% for row in grid %}
+          {% for num in row %}
+            {% if num is not none and num in moldura %}
+              <button type="button"
+                class="grid-ball {% if num in fixed_mol %}fixed-ball-mol{% elif num in sel_mol %}sel-mol{% endif %}"
+                data-num="{{ num }}" data-group="mol"
+                onclick="toggleBall({{ num }}, 'mol')"
+                ondblclick="toggleFixed({{ num }}, 'mol');event.preventDefault()">
+                {{ "%02d"|format(num) }}
+              </button>
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      </div>
+
+      <div class="flex gap-8 mt-8">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="clearGroup('mol')">✕ Limpar</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="selectGroup('mol')">☑ Todos</button>
+      </div>
+    </div>
+
+    <!-- Grid Núcleo (Miolo) -->
+    <div class="card mb-16">
+      <div class="flex justify-between items-center mb-8">
+        <div class="card-title" style="color:var(--accent);margin:0;">
+          🟡 Núcleo — Centro do Cartão
+        </div>
+        <div style="font-size:13px;color:var(--accent);" id="mio-count">
+          {{ sel_mio|length }} selecionada(s)
+        </div>
+      </div>
+      <div class="text-muted text-sm mb-8">
+        Números do centro ({{ miolo|length }} no total). Clique para selecionar/remover.
+        Clique duplo para marcar como fixa (borda dourada).
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:5px;" id="mio-grid">
+        {% for row in grid %}
+          {% for num in row %}
+            {% if num is not none and num in miolo %}
+              <button type="button"
+                class="grid-ball {% if num in fixed_mio %}fixed-ball-mio{% elif num in sel_mio %}sel-mio{% endif %}"
+                data-num="{{ num }}" data-group="mio"
+                onclick="toggleBall({{ num }}, 'mio')"
+                ondblclick="toggleFixed({{ num }}, 'mio');event.preventDefault()">
+                {{ "%02d"|format(num) }}
+              </button>
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      </div>
+
+      <div class="flex gap-8 mt-8">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="clearGroup('mio')">✕ Limpar</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="selectGroup('mio')">☑ Todos</button>
+      </div>
+    </div>
+
+    <!-- Resultado -->
+    {% if combos %}
+
+    <!-- Estatísticas -->
+    <div class="grid-4 mb-16" style="grid-template-columns:1fr 1fr 1fr 1fr;">
       <div class="stat-card">
-        <div class="stat-label">Combinações geradas</div>
+        <div class="stat-label">Jogos gerados</div>
         <div class="stat-value">{{ combos|length }}</div>
         <div class="stat-sub">
           de {{ "{:,}".format(total_possible).replace(",",".") }} possíveis
           {% if truncated %}<span class="badge badge-blue" style="font-size:10px;">amostra</span>{% endif %}
         </div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card danger">
         <div class="stat-label">Investimento</div>
-        <div class="stat-value" style="font-size:18px;color:var(--danger)">
+        <div class="stat-value" style="font-size:16px;">
           R$ {{ "%.2f"|format(cfg.price * combos|length) }}
         </div>
         <div class="stat-sub">R$ {{ "%.2f"|format(cfg.price) }}/jogo</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Prob. 1 jogo vencer</div>
-        <div class="stat-value" style="font-size:14px;color:var(--info)">{{ odds_single }}</div>
+        <div class="stat-label">Prob. 1 jogo</div>
+        <div class="stat-value" style="font-size:12px;color:var(--info);">{{ odds_single }}</div>
         <div class="stat-sub">qualquer prêmio</div>
       </div>
-      <div class="stat-card {% if prob_n > 0.01 %}success{% endif %}">
-        <div class="stat-label">Prob. ao menos 1 vencer</div>
-        <div class="stat-value" style="font-size:14px;color:var(--success)">
-          {{ "%.2f"|format(prob_n * 100) }}%
+      <div class="stat-card {% if prob_n > 0.05 %}success{% endif %}">
+        <div class="stat-label">Prob. ao menos 1</div>
+        <div class="stat-value" style="font-size:16px;color:var(--success);">
+          {{ "%.1f"|format(prob_n * 100) }}%
         </div>
-        <div class="stat-sub">{{ odds_n }} · {{ combos|length }} jogo(s)</div>
+        <div class="stat-sub">com {{ combos|length }} jogo(s)</div>
       </div>
     </div>
 
-    <!-- Ação: salvar -->
-    <form method="POST" id="save-form" class="mb-16">
-      <input type="hidden" name="action" value="save">
-      <input type="hidden" name="lottery_type" value="{{ selected_lt }}">
-      <input type="hidden" name="dezenas" value="{{ selected_nums_str }}">
-      <input type="hidden" name="combos_data" id="combos-data"
-             value="{{ combos_data_str }}">
-      <button type="submit" class="btn btn-success w-full"
-              onclick="return confirm('Salvar {{ combos|length }} jogos na lista?')">
-        💾 Salvar {{ combos|length }} Jogo(s) na Lista
-      </button>
-    </form>
-
-    <!-- Tabela de combinações -->
+    <!-- Tabela de jogos -->
     <div class="card" style="padding:0;">
-      <div style="padding:14px 20px 10px; font-size:13px; font-weight:600;
-                  text-transform:uppercase; letter-spacing:.8px; color:var(--muted);">
-        Jogos Gerados{% if combos|length > 200 %} (mostrando 200 de {{ combos|length }}){% endif %}
+      <div style="padding:14px 20px 10px;font-size:13px;font-weight:600;
+                  text-transform:uppercase;letter-spacing:.8px;color:var(--muted);">
+        Jogos Gerados (ordenados por Score)
+        {% if combos|length > 200 %}(mostrando 200 de {{ combos|length }}){% endif %}
       </div>
-      <div class="table-wrap" style="border:none; max-height:520px; overflow-y:auto;">
+      <div class="table-wrap" style="border:none;max-height:500px;overflow-y:auto;">
         <table>
           <thead>
             <tr>
               <th>#</th>
-              <th>Dezenas</th>
-              <th style="white-space:nowrap">🔵 Moldura</th>
-              <th style="white-space:nowrap">🟡 Miolo</th>
+              <th>Dezenas <span style="color:var(--info)">🔵</span>Moldura <span style="color:var(--accent)">🟡</span>Núcleo</th>
+              <th>🔵</th>
+              <th>🟡</th>
+              <th>Score</th>
             </tr>
           </thead>
           <tbody>
-            {% for combo in combos[:200] %}
+            {% for combo, sc in combos_scored[:200] %}
             {% set stats = combo_stats(combo, moldura) %}
             <tr>
               <td class="text-muted text-sm">{{ loop.index }}</td>
@@ -219,7 +346,10 @@
                   {% for n in combo %}
                     <span class="ball ball-sm"
                       style="background:{% if n in moldura %}rgba(59,130,246,0.85){% else %}rgba(245,166,35,0.85){% endif %};
-                             color:#fff; font-weight:700;">
+                             color:#fff;font-weight:700;
+                             {% if (fixed_mol and n in fixed_mol) or (fixed_mio and n in fixed_mio) %}
+                             box-shadow:0 0 0 2px gold;
+                             {% endif %}">
                       {{ "%02d"|format(n) }}
                     </span>
                   {% endfor %}
@@ -235,6 +365,15 @@
                   {{ stats[1] }}
                 </span>
               </td>
+              <td>
+                {% if sc >= 67 %}
+                  <span class="badge" style="background:rgba(34,197,94,.25);color:#16a34a;font-weight:700;">{{ sc }}</span>
+                {% elif sc >= 34 %}
+                  <span class="badge" style="background:rgba(234,179,8,.25);color:#b45309;font-weight:700;">{{ sc }}</span>
+                {% else %}
+                  <span class="badge" style="background:rgba(239,68,68,.25);color:#dc2626;font-weight:700;">{{ sc }}</span>
+                {% endif %}
+              </td>
             </tr>
             {% endfor %}
           </tbody>
@@ -243,121 +382,276 @@
     </div>
 
     {% else %}
-    <div class="card" style="height:400px;display:flex;align-items:center;justify-content:center;">
+
+    <div class="card" style="height:320px;display:flex;align-items:center;justify-content:center;">
       <div class="empty-state">
         <div class="icon">🔢</div>
         <p>
-          Selecione as dezenas no grid ao lado<br>
-          e clique em <strong>Combinar</strong>.<br>
-          <span class="text-muted text-sm">
-            🔵 Moldura = borda do cartão &nbsp;·&nbsp; 🟡 Miolo = centro
-          </span>
+          <strong>Como usar:</strong><br>
+          1. Selecione dezenas da 🔵 <strong>Moldura</strong> (borda)<br>
+          2. Selecione dezenas do 🟡 <strong>Núcleo</strong> (centro)<br>
+          3. Defina quantas de cada por jogo<br>
+          4. (Opcional) Marque dezenas fixas e configure filtros<br>
+          5. Clique em <strong>Gerar Combinações</strong>
         </p>
       </div>
     </div>
-    {% endif %}
 
+    {% endif %}
   </div>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// ── selected numbers state ──────────────────────────────────────────────────
-let selected = new Set([
-  {% for n in selected_nums %}{{ n }},{% endfor %}
-]);
+const selMol   = new Set([{% for n in sel_mol %}{{ n }},{% endfor %}]);
+const selMio   = new Set([{% for n in sel_mio %}{{ n }},{% endfor %}]);
+const fixedMol = new Set([{% for n in fixed_mol %}{{ n }},{% endfor %}]);
+const fixedMio = new Set([{% for n in fixed_mio %}{{ n }},{% endfor %}]);
 
-function toggleNum(n) {
-  if (selected.has(n)) {
-    selected.delete(n);
+// ── Main grid toggle ──────────────────────────────────────────────────────
+function toggleBall(n, group) {
+  const s = group === 'mol' ? selMol : selMio;
+  s.has(n) ? s.delete(n) : s.add(n);
+  render(group);
+  updateHidden();
+}
+
+function clearGroup(group) {
+  const s = group === 'mol' ? selMol : selMio;
+  const f = group === 'mol' ? fixedMol : fixedMio;
+  s.clear(); f.clear();
+  render(group); renderFixed(); updateHidden();
+}
+
+function selectGroup(group) {
+  document.querySelectorAll(`#${group}-grid .grid-ball`).forEach(b => {
+    (group === 'mol' ? selMol : selMio).add(+b.dataset.num);
+  });
+  render(group); updateHidden();
+}
+
+function render(group) {
+  const s   = group === 'mol' ? selMol   : selMio;
+  const f   = group === 'mol' ? fixedMol : fixedMio;
+  const selCls   = group === 'mol' ? 'sel-mol'        : 'sel-mio';
+  const fixedCls = group === 'mol' ? 'fixed-ball-mol' : 'fixed-ball-mio';
+  document.querySelectorAll(`#${group}-grid .grid-ball`).forEach(b => {
+    const num = +b.dataset.num;
+    b.classList.remove(selCls, fixedCls);
+    if (f.has(num))      b.classList.add(fixedCls);
+    else if (s.has(num)) b.classList.add(selCls);
+  });
+  document.getElementById(`${group}-count`).textContent =
+    `${s.size} selecionada(s)${f.size ? ' · ' + f.size + ' fixa(s)' : ''}`;
+  updateTotalPreview();
+}
+
+// ── Fixed toggle ──────────────────────────────────────────────────────────
+function toggleFixed(n, group) {
+  const s = group === 'mol' ? selMol   : selMio;
+  const f = group === 'mol' ? fixedMol : fixedMio;
+  if (f.has(n)) {
+    f.delete(n);
+    // keep selected
   } else {
-    selected.add(n);
+    s.add(n);   // ensure it's selected too
+    f.add(n);
   }
-  renderGrid();
+  render(group); renderFixed(); updateHidden();
 }
 
-function clearAll() {
-  selected.clear();
-  renderGrid();
+function clearFixed() {
+  fixedMol.clear(); fixedMio.clear();
+  render('mol'); render('mio'); renderFixed(); updateHidden();
 }
 
-function selectAll() {
-  document.querySelectorAll('.grid-ball').forEach(b => selected.add(+b.dataset.num));
-  renderGrid();
-}
-
-function renderGrid() {
-  document.querySelectorAll('.grid-ball').forEach(btn => {
-    const n = +btn.dataset.num;
-    btn.classList.remove('sel', 'mol', 'mio');
-    if (selected.has(n))       btn.classList.add('sel');
-    else if (btn.dataset.moldura) btn.classList.add('mol');
-    else                       btn.classList.add('mio');
+function renderFixed() {
+  const totalFixed = fixedMol.size + fixedMio.size;
+  const badge = document.getElementById('fixed-badge');
+  if (totalFixed > 0) {
+    badge.textContent = totalFixed + ' fixa(s)';
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+  // update mini grids
+  document.querySelectorAll('#fixed-mol-mini .grid-ball-mini').forEach(b => {
+    const n = +b.dataset.num;
+    b.classList.remove('fixed-mol', 'sel-mol-mini');
+    if (fixedMol.has(n))     b.classList.add('fixed-mol');
+    else if (selMol.has(n))  b.classList.add('sel-mol-mini');
   });
-  document.getElementById('hidden-dezenas').value = [...selected].sort((a,b)=>a-b).join(' ');
-  document.getElementById('sel-count').textContent =
-    `(${selected.size} selecionada(s))`;
-}
-
-// mark data-moldura on page load
-document.addEventListener('DOMContentLoaded', () => {
-  const moldura = new Set([{% for n in moldura %}{{ n }},{% endfor %}]);
-  document.querySelectorAll('.grid-ball').forEach(btn => {
-    if (moldura.has(+btn.dataset.num)) btn.dataset.moldura = '1';
+  document.querySelectorAll('#fixed-mio-mini .grid-ball-mini').forEach(b => {
+    const n = +b.dataset.num;
+    b.classList.remove('fixed-mio', 'sel-mio-mini');
+    if (fixedMio.has(n))     b.classList.add('fixed-mio');
+    else if (selMio.has(n))  b.classList.add('sel-mio-mini');
   });
-  renderGrid();
-});
-
-function toggleFilter() {
-  const panel = document.getElementById('filter-panel');
-  panel.style.display = document.getElementById('chk-filter').checked ? 'block' : 'none';
 }
 
-// ── save form: encode combos as text ────────────────────────────────────────
+function updateHidden() {
+  document.getElementById('hid-mol').value       = [...selMol].sort((a,b)=>a-b).join(' ');
+  document.getElementById('hid-mio').value       = [...selMio].sort((a,b)=>a-b).join(' ');
+  document.getElementById('hid-fixed-mol').value = [...fixedMol].sort((a,b)=>a-b).join(' ');
+  document.getElementById('hid-fixed-mio').value = [...fixedMio].sort((a,b)=>a-b).join(' ');
+}
+
+// ── Filter UI toggles ─────────────────────────────────────────────────────
+function toggleSomaInputs() {
+  document.getElementById('soma-inputs').style.display =
+    document.getElementById('chk-soma').checked ? 'flex' : 'none';
+}
+function toggleParidadeInputs() {
+  document.getElementById('paridade-inputs').style.display =
+    document.getElementById('chk-paridade').checked ? 'flex' : 'none';
+}
+function toggleConsInputs() {
+  document.getElementById('cons-inputs').style.display =
+    document.getElementById('chk-cons').checked ? 'block' : 'none';
+}
+function setSomaSugerida(lo, hi) {
+  document.getElementById('soma-min').value = lo;
+  document.getElementById('soma-max').value = hi;
+  document.getElementById('chk-soma').checked = true;
+  toggleSomaInputs();
+}
+
+// ── Sync k_mio display ────────────────────────────────────────────────────
+function syncKMio(k) {
+  const kMol = Math.max(0, Math.min(k, +document.getElementById('k-mol').value || 0));
+  document.getElementById('k-mio-display').value = k - kMol;
+  updateTotalPreview();
+}
+
+function comb(n, k) {
+  if (k < 0 || k > n) return 0;
+  if (k === 0 || k === n) return 1;
+  let r = 1;
+  for (let i = 0; i < Math.min(k, n-k); i++) {
+    r = r * (n - i) / (i + 1);
+  }
+  return Math.round(r);
+}
+
+function updateTotalPreview() {
+  const k    = {{ k }};
+  const kMol = +document.getElementById('k-mol').value || 0;
+  const kMio = k - kMol;
+  // Effective pool excludes fixed nums
+  const nMol = selMol.size;
+  const nMio = selMio.size;
+  const nFixMol = fixedMol.size;
+  const nFixMio = fixedMio.size;
+  const kMolVar = kMol - nFixMol;
+  const kMioVar = kMio - nFixMio;
+  const poolMol = nMol - nFixMol;
+  const poolMio = nMio - nFixMio;
+  const total = comb(poolMol, kMolVar) * comb(poolMio, kMioVar);
+  const el = document.getElementById('total-preview');
+  if (kMolVar >= 0 && kMioVar >= 0 && poolMol >= kMolVar && poolMio >= kMioVar) {
+    el.innerHTML = `C(${poolMol},${kMolVar}) × C(${poolMio},${kMioVar}) = <strong>${total.toLocaleString('pt-BR')}</strong> combinações possíveis`;
+  } else {
+    el.innerHTML = '';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-  const saveForm = document.getElementById('save-form');
-  if (!saveForm) return;
-  const combosData = document.getElementById('combos-data');
-  // combos_data is already set via Jinja; just ensure it's correct format
-  combosData.value = combosData.value
-    .replace(/[()]/g, '')
-    .replace(/,/g, ' ');
+  render('mol'); render('mio'); renderFixed(); updateTotalPreview();
 });
 </script>
 
 <style>
-/* Grid number buttons */
+/* Main grid balls */
 .grid-ball {
-  width: 100%;
-  aspect-ratio: 1;
+  width: 36px; height: 36px;
   border-radius: 50%;
   border: 1.5px solid var(--border);
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all .15s;
-  background: var(--elevated);
-  color: var(--text);
-  padding: 0;
-  line-height: 1;
+  font-size: 11px; font-weight: 700;
+  cursor: pointer; transition: all .12s;
+  background: var(--elevated); color: var(--text);
+  padding: 0; line-height: 1;
 }
-.grid-ball:hover { transform: scale(1.1); }
-.grid-ball.mol {
-  background: rgba(59,130,246,.18);
+.grid-ball:hover { transform: scale(1.12); }
+.grid-ball.sel-mol {
+  background: rgba(59,130,246,0.85);
   border-color: var(--info);
-  color: var(--info);
+  color: #fff; transform: scale(1.08);
 }
-.grid-ball.mio {
-  background: rgba(245,166,35,.12);
+.grid-ball.sel-mio {
+  background: rgba(245,166,35,0.85);
   border-color: var(--accent);
-  color: var(--accent);
+  color: #000; font-weight: 800; transform: scale(1.08);
 }
-.grid-ball.sel {
-  background: var(--success);
-  border-color: var(--success);
-  color: #fff;
-  transform: scale(1.08);
+.grid-ball.fixed-ball-mol {
+  background: rgba(59,130,246,0.85);
+  border: 2.5px solid gold;
+  color: #fff; transform: scale(1.08);
+  box-shadow: 0 0 6px rgba(255,215,0,0.7);
 }
+.grid-ball.fixed-ball-mio {
+  background: rgba(245,166,35,0.85);
+  border: 2.5px solid gold;
+  color: #000; font-weight: 800; transform: scale(1.08);
+  box-shadow: 0 0 6px rgba(255,215,0,0.7);
+}
+
+/* Mini grid balls (in fixed section) */
+.grid-ball-mini {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  font-size: 10px; font-weight: 700;
+  cursor: pointer; transition: all .12s;
+  background: var(--elevated); color: var(--text);
+  padding: 0; line-height: 1;
+}
+.grid-ball-mini:hover { transform: scale(1.1); }
+.grid-ball-mini.sel-mol-mini {
+  background: rgba(59,130,246,0.6);
+  border-color: var(--info); color: #fff;
+}
+.grid-ball-mini.sel-mio-mini {
+  background: rgba(245,166,35,0.6);
+  border-color: var(--accent); color: #000;
+}
+.grid-ball-mini.fixed-mol {
+  background: rgba(59,130,246,0.85);
+  border: 2px solid gold; color: #fff;
+  box-shadow: 0 0 4px rgba(255,215,0,0.6);
+}
+.grid-ball-mini.fixed-mio {
+  background: rgba(245,166,35,0.85);
+  border: 2px solid gold; color: #000;
+  box-shadow: 0 0 4px rgba(255,215,0,0.6);
+}
+
+/* Filter collapsible */
+.filter-block {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: var(--elevated);
+}
+.filter-summary {
+  padding: 10px 0;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  user-select: none;
+}
+.filter-summary::-webkit-details-marker { display: none; }
+.filter-summary::before {
+  content: '▶';
+  font-size: 10px;
+  color: var(--muted);
+  transition: transform .2s;
+}
+details[open] > .filter-summary::before { transform: rotate(90deg); }
 </style>
 {% endblock %}

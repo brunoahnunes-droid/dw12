@@ -630,7 +630,7 @@ def pares():
 def combinar():
     from services.combinator import (
         compute_moldura, build_grid, combine_groups,
-        combo_stats, grid_cols,
+        combo_stats, grid_cols, aplicar_filtros, score_combo, soma_sugerida,
     )
     from services.probability import hyper_at_least, odds_string
     import math
@@ -651,24 +651,59 @@ def combinar():
 
     action         = request.form.get("action", "")
     combos         = []
+    combos_scored  = []   # list of (combo, score)
     total_possible = 0
     truncated      = False
     sel_mol        = []   # selected moldura numbers
     sel_mio        = []   # selected miolo numbers
+    fixed_mol      = []   # fixed moldura numbers
+    fixed_mio      = []   # fixed miolo numbers
     k_mol          = int(request.form.get("k_mol", default_k_mol))
     k_mio          = int(request.form.get("k_mio", default_k_mio))
     max_games      = 500
     prob_single    = 0.0
     prob_n         = 0.0
 
+    # Soma sugerida para a loteria atual
+    soma_lo, soma_hi = soma_sugerida(selected_lt_name)
+
     if action == "combine":
-        mol_str   = request.form.get("mol_dezenas", "").strip()
-        mio_str   = request.form.get("mio_dezenas", "").strip()
+        mol_str      = request.form.get("mol_dezenas", "").strip()
+        mio_str      = request.form.get("mio_dezenas", "").strip()
+        fix_mol_str  = request.form.get("fixed_mol", "").strip()
+        fix_mio_str  = request.form.get("fixed_mio", "").strip()
+
         sel_mol   = [int(x) for x in mol_str.split() if x.isdigit()]
         sel_mio   = [int(x) for x in mio_str.split() if x.isdigit()]
+        fixed_mol = [int(x) for x in fix_mol_str.split() if x.isdigit()]
+        fixed_mio = [int(x) for x in fix_mio_str.split() if x.isdigit()]
+
         k_mol     = max(0, min(k, int(request.form.get("k_mol", default_k_mol))))
         k_mio     = k - k_mol
         max_games = max(1, min(5000, int(request.form.get("max_games", 500))))
+
+        # Filtros de acertabilidade
+        cfg_filtros = {}
+        if request.form.get("use_soma"):
+            try:
+                cfg_filtros["soma"] = True
+                cfg_filtros["soma_min"] = int(request.form.get("soma_min", soma_lo or 0))
+                cfg_filtros["soma_max"] = int(request.form.get("soma_max", soma_hi or 9999))
+            except (ValueError, TypeError):
+                cfg_filtros.pop("soma", None)
+        if request.form.get("use_paridade"):
+            try:
+                cfg_filtros["paridade"] = True
+                cfg_filtros["par_min"] = int(request.form.get("par_min", 0))
+                cfg_filtros["par_max"] = int(request.form.get("par_max", k))
+            except (ValueError, TypeError):
+                cfg_filtros.pop("paridade", None)
+        if request.form.get("use_consecutivos"):
+            try:
+                cfg_filtros["consecutivos"] = True
+                cfg_filtros["max_seq"] = int(request.form.get("max_seq", 2))
+            except (ValueError, TypeError):
+                cfg_filtros.pop("consecutivos", None)
 
         err = None
         if len(sel_mol) < k_mol:
@@ -680,8 +715,21 @@ def combinar():
             flash(err, "error")
         else:
             combos, total_possible, truncated = combine_groups(
-                sel_mol, sel_mio, k_mol, k_mio, max_games
+                sel_mol, sel_mio, k_mol, k_mio, max_games,
+                fixed_mol=fixed_mol, fixed_mio=fixed_mio,
             )
+
+            # Aplicar filtros de acertabilidade
+            if cfg_filtros:
+                combos = aplicar_filtros(combos, cfg_filtros)
+
+            # Calcular score e ordenar por score descendente
+            combos_scored = sorted(
+                [(c, score_combo(c, moldura, cfg_filtros, selected_lt_name)) for c in combos],
+                key=lambda x: -x[1]
+            )
+            combos = [c for c, _ in combos_scored]
+
             N = cfg_lt.number_range[1] - cfg_lt.number_range[0] + 1
             min_prize = cfg_lt.prize_tiers[-1].min_matches if cfg_lt.prize_tiers else k
             prob_single = hyper_at_least(N, k, k, min_prize)
@@ -716,19 +764,26 @@ def combinar():
                            k_mol=k_mol,
                            k_mio=k - k_mol,
                            combos=combos,
+                           combos_scored=combos_scored,
                            combos_data_str=combos_data_str,
                            total_possible=total_possible,
                            truncated=truncated,
                            sel_mol=set(sel_mol),
                            sel_mio=set(sel_mio),
+                           fixed_mol=set(fixed_mol),
+                           fixed_mio=set(fixed_mio),
                            sel_mol_str=" ".join(str(n) for n in sorted(sel_mol)),
                            sel_mio_str=" ".join(str(n) for n in sorted(sel_mio)),
+                           fixed_mol_str=" ".join(str(n) for n in sorted(fixed_mol)),
+                           fixed_mio_str=" ".join(str(n) for n in sorted(fixed_mio)),
                            max_games=max_games,
                            prob_single=prob_single,
                            prob_n=prob_n,
                            odds_single=odds_string(prob_single),
                            odds_n=odds_string(prob_n),
                            combo_stats=combo_stats,
+                           soma_lo=soma_lo,
+                           soma_hi=soma_hi,
                            **common_ctx())
 
 
