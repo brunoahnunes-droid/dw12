@@ -1,53 +1,197 @@
 {% extends "base.html" %}
 {% block title %}Histórico · Mega do Carlão{% endblock %}
 {% block page_title %}Histórico de Sorteios{% endblock %}
-{% block page_sub %}{{ draws|length }} sorteio(s) salvo(s){% endblock %}
+{% block page_sub %}
+  {{ total_draws }} sorteio(s) salvos · {{ lottery_count }} loteria(s) com dados
+{% endblock %}
 
 {% block topbar_right %}
-<button class="btn btn-info btn-sm" onclick="toggleImport()">📥 Importar Online</button>
+<button class="btn btn-info btn-sm" onclick="toggleImport()">📥 Importar</button>
 {% endblock %}
 
 {% block content %}
 
-<!-- Painel de importação -->
-<div id="import-panel" style="display:none;" class="card mb-16" style="border-color:var(--info)">
-  <div class="card-title">Importar Resultados da API Caixa</div>
-  <form method="POST" action="{{ url_for('importar_historico') }}"
-        onsubmit="showLoading('Baixando resultados da Caixa…')">
-    <div class="form-row">
+<!-- Per-lottery summary grid -->
+<div class="grid grid-4 mb-16">
+  {% for lt in lt_summary %}
+  <div class="card" style="padding:14px 16px; border-left:3px solid {{ lt.color }};">
+    <div style="font-size:20px; line-height:1;">{{ lt.emoji }}</div>
+    <div style="font-weight:600; font-size:12px; color:var(--muted); margin:6px 0 2px;">{{ lt.name }}</div>
+    <div style="font-size:26px; font-weight:700; color:{% if lt.count > 0 %}var(--accent){% else %}var(--muted){% endif %};">
+      {{ lt.count }}
+    </div>
+    <div style="font-size:11px; color:var(--muted);">sorteios</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Import panel -->
+<div id="import-panel" class="card mb-16" style="display:none;">
+  <div class="card-title" style="margin-bottom:12px;">Importar Resultados</div>
+
+  <!-- Tab switcher -->
+  <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+    <button class="btn btn-sm btn-info" id="tbtn-api"   onclick="switchTab('api')">🌐 Recentes (API)</button>
+    <button class="btn btn-sm btn-ghost" id="tbtn-full" onclick="switchTab('full')">📦 Histórico Completo</button>
+    <button class="btn btn-sm btn-ghost" id="tbtn-xlsx" onclick="switchTab('xlsx')">📊 Upload Excel</button>
+    <button class="btn btn-sm btn-ghost" id="tbtn-del"  onclick="switchTab('del')"
+            style="margin-left:auto; color:var(--danger);">🗑️ Limpar</button>
+  </div>
+
+  <!-- Tab: Recentes via API -->
+  <div id="tab-api">
+    <div class="text-muted text-sm mb-16">
+      Importa os N sorteios mais recentes da API oficial da Caixa. Máximo 200 por vez.
+      Sorteios já salvos são ignorados automaticamente.
+    </div>
+    <form method="POST" action="{{ url_for('importar_historico') }}"
+          onsubmit="showLoading('Baixando resultados da Caixa…')">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Loteria</label>
+          <select class="form-control" name="lottery_type">
+            {% for lt_val, lt_label in lt_choices %}
+              <option value="{{ lt_val }}">{{ lt_label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Quantidade (1–200)</label>
+          <input class="form-control" type="number" name="n_import" value="50" min="1" max="200">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-info w-full">🌐 Importar Recentes</button>
+    </form>
+  </div>
+
+  <!-- Tab: Histórico Completo -->
+  <div id="tab-full" style="display:none;">
+    <div class="card mb-16" style="background:rgba(245,166,35,.07); border-color:var(--warn); padding:12px 16px;">
+      <span style="color:var(--warn); font-weight:600;">⚠️ Atenção</span>
+      <p class="text-sm text-muted" style="margin:4px 0 0;">
+        Importa <strong>TODOS</strong> os sorteios históricos via API comunitária
+        (<code>loteriascaixa-api.herokuapp.com</code>).
+        A operação pode levar <strong>1 a 3 minutos</strong>.
+        Sorteios já salvos são ignorados.
+      </p>
+    </div>
+    <form method="POST" action="{{ url_for('importar_historico_completo') }}"
+          onsubmit="showLoading('Baixando histórico completo… pode demorar alguns minutos.')">
       <div class="form-group">
-        <label class="form-label">Tipo de Jogo</label>
+        <label class="form-label">Loteria</label>
         <select class="form-control" name="lottery_type">
           {% for lt_val, lt_label in lt_choices %}
             <option value="{{ lt_val }}">{{ lt_label }}</option>
           {% endfor %}
         </select>
       </div>
-      <div class="form-group">
-        <label class="form-label">Quantidade de concursos</label>
-        <input class="form-control" type="number" name="n_import"
-               value="50" min="1" max="200">
+      <button type="submit" class="btn btn-accent w-full">📦 Importar Histórico Completo</button>
+    </form>
+  </div>
+
+  <!-- Tab: Upload Excel -->
+  <div id="tab-xlsx" style="display:none;">
+    <div class="text-muted text-sm mb-16">
+      Faça upload do arquivo <strong>.xlsx</strong> oficial da Caixa.<br>
+      Disponível em <strong>loterias.caixa.gov.br → Resultados → Baixar Resultados</strong>.
+      Sorteios já salvos são ignorados automaticamente.
+    </div>
+    <form method="POST" action="{{ url_for('upload_excel_historico') }}"
+          enctype="multipart/form-data"
+          onsubmit="showLoading('Processando arquivo Excel…')">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Loteria</label>
+          <select class="form-control" name="lottery_type">
+            {% for lt_val, lt_label in lt_choices %}
+              <option value="{{ lt_val }}">{{ lt_label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Arquivo Excel (.xlsx / .xls)</label>
+          <input class="form-control" type="file" name="excel_file" accept=".xlsx,.xls">
+        </div>
       </div>
+      <button type="submit" class="btn btn-success w-full">📊 Importar do Excel</button>
+    </form>
+  </div>
+
+  <!-- Tab: Limpar -->
+  <div id="tab-del" style="display:none;">
+    <div class="card mb-16"
+         style="background:rgba(239,68,68,.07); border-color:var(--danger); padding:12px 16px;">
+      <span style="color:var(--danger); font-weight:600;">⚠️ Ação irreversível</span>
+      <p class="text-sm text-muted" style="margin:4px 0 0;">
+        Remove sorteios do histórico permanentemente. O modelo de IA também será redefinido.
+      </p>
     </div>
-    <div class="text-muted text-sm" style="margin-bottom:12px;">
-      ℹ️ Importa os N resultados mais recentes da API oficial da Caixa.
-      Concursos já salvos são ignorados automaticamente.
-    </div>
-    <button type="submit" class="btn btn-info w-full">
-      🌐 Importar Resultados Online
-    </button>
-  </form>
+    <form method="POST" action="{{ url_for('limpar_historico') }}"
+          onsubmit="return confirm('Confirma a limpeza do histórico? Esta ação não pode ser desfeita.')">
+      <div class="form-group">
+        <label class="form-label">Loteria (vazio = todas)</label>
+        <select class="form-control" name="lottery_type">
+          <option value="">— Todas as loterias —</option>
+          {% for lt_val, lt_label in lt_choices %}
+            <option value="{{ lt_val }}">{{ lt_label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn w-full"
+              style="background:var(--danger); color:#fff; border-color:var(--danger);">
+        🗑️ Limpar Histórico
+      </button>
+    </form>
+  </div>
 </div>
 
-{% if draws %}
+{% if total_draws > 0 %}
+
+<!-- Filter bar -->
+<div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+  <span class="text-muted text-sm" style="white-space:nowrap;">Filtrar por:</span>
+  <a href="{{ url_for('historico') }}"
+     class="btn btn-sm {% if not filter_lt %}btn-info{% else %}btn-ghost{% endif %}">
+    Todos ({{ total_draws }})
+  </a>
+  {% for lt in lt_summary %}
+    {% if lt.count > 0 %}
+    <a href="{{ url_for('historico', lt=lt.name) }}"
+       class="btn btn-sm {% if filter_lt == lt.name %}btn-info{% else %}btn-ghost{% endif %}">
+      {{ lt.emoji }} {{ lt.name }} ({{ lt.count }})
+    </a>
+    {% endif %}
+  {% endfor %}
+</div>
+
+<!-- Pagination top bar -->
+{% if filtered_count > 0 %}
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+  <span class="text-muted text-sm">
+    Exibindo {{ draws|length }} de {{ filtered_count }} sorteio(s)
+    {% if total_pages > 1 %}&nbsp;·&nbsp; página {{ page }} de {{ total_pages }}{% endif %}
+  </span>
+  {% if total_pages > 1 %}
+  <div style="display:flex; gap:4px;">
+    {% if page > 1 %}
+    <a href="{{ url_for('historico', lt=filter_lt, page=page-1) }}" class="btn btn-sm btn-ghost">← Anterior</a>
+    {% endif %}
+    {% if page < total_pages %}
+    <a href="{{ url_for('historico', lt=filter_lt, page=page+1) }}" class="btn btn-sm btn-ghost">Próxima →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- Draws table -->
 <div class="card" style="padding:0;">
   <div class="table-wrap" style="border:none; border-radius:var(--radius);">
     <table>
       <thead>
         <tr>
-          <th>Concurso</th>
+          <th style="width:80px;">Concurso</th>
           <th>Jogo</th>
-          <th>Data</th>
+          <th style="width:100px;">Data</th>
           <th>Números Sorteados</th>
           <th>Extra</th>
         </tr>
@@ -67,11 +211,11 @@
             {% if d.numbers2_sorted %}
             <div class="balls mt-8">
               {% for n in d.numbers2_sorted %}
-                <span class="ball ball-sm" style="background:var(--info);color:#fff">
+                <span class="ball ball-sm" style="background:var(--info);color:#fff;">
                   {{ "%02d"|format(n) }}
                 </span>
               {% endfor %}
-              <span class="text-muted text-sm">(2º sorteio)</span>
+              <span class="text-muted text-sm">&nbsp;(2º sorteio)</span>
             </div>
             {% endif %}
           </td>
@@ -82,17 +226,40 @@
     </table>
   </div>
 </div>
+
+<!-- Pagination bottom -->
+{% if total_pages > 1 %}
+<div style="display:flex; justify-content:center; gap:4px; margin-top:12px; flex-wrap:wrap;">
+  {% for p in page_range %}
+    {% if p == -1 %}
+      <span class="text-muted" style="padding:6px 4px; align-self:center;">…</span>
+    {% elif p == page %}
+      <span class="btn btn-sm btn-info">{{ p }}</span>
+    {% else %}
+      <a href="{{ url_for('historico', lt=filter_lt, page=p) }}" class="btn btn-sm btn-ghost">{{ p }}</a>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
 {% else %}
-<div class="card" style="padding: 60px;">
+<div class="card" style="padding:40px; text-align:center;">
+  <div class="text-muted">Nenhum sorteio encontrado para este filtro.</div>
+</div>
+{% endif %}
+
+{% else %}
+<div class="card" style="padding:60px;">
   <div class="empty-state">
     <div class="icon">🕐</div>
     <p>Nenhum sorteio salvo ainda.<br>
-      <a href="{{ url_for('conferir') }}" class="text-accent">Confira um sorteio</a>
-      e salve no histórico, ou clique em
-      <strong>📥 Importar Online</strong> para buscar da API da Caixa.</p>
+      Clique em <strong>📥 Importar</strong> para buscar os resultados históricos da Caixa,<br>
+      ou <a href="{{ url_for('conferir') }}" class="text-accent">confira um sorteio</a>
+      e salve manualmente.</p>
   </div>
 </div>
 {% endif %}
+
 {% endblock %}
 
 {% block scripts %}
@@ -100,6 +267,20 @@
 function toggleImport() {
   const p = document.getElementById('import-panel');
   p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+
+const _tabIds   = ['api', 'full', 'xlsx', 'del'];
+const _tabStyle = { del: 'color:var(--danger)' };
+
+function switchTab(name) {
+  _tabIds.forEach(t => {
+    document.getElementById('tab-' + t).style.display  = t === name ? 'block' : 'none';
+    const btn = document.getElementById('tbtn-' + t);
+    if (btn) {
+      btn.className = t === name ? 'btn btn-sm btn-info' : 'btn btn-sm btn-ghost';
+      btn.style.cssText = t === name ? '' : (_tabStyle[t] || '');
+    }
+  });
 }
 </script>
 {% endblock %}

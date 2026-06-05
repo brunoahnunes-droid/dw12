@@ -67,8 +67,49 @@ class Store:
         self._data.setdefault("draw_history", []).append(draw.to_dict())
         self._flush()
 
+    def save_draws_bulk(self, draws: List[DrawResult]) -> int:
+        """Insert multiple draws, skipping duplicates. Returns count added."""
+        existing = {
+            (d["lottery_type"], d.get("contest_number", ""))
+            for d in self._data.get("draw_history", [])
+            if d.get("contest_number")
+        }
+        added = 0
+        bucket = self._data.setdefault("draw_history", [])
+        for draw in draws:
+            key = (draw.lottery_type.value, draw.contest_number or "")
+            if key in existing:
+                continue
+            bucket.append(draw.to_dict())
+            existing.add(key)
+            added += 1
+        if added:
+            self._flush()
+        return added
+
+    def clear_draws(self, lottery_type: LotteryType | None = None) -> int:
+        if lottery_type is None:
+            removed = len(self._data.get("draw_history", []))
+            self._data["draw_history"] = []
+        else:
+            before = len(self._data.get("draw_history", []))
+            self._data["draw_history"] = [
+                d for d in self._data.get("draw_history", [])
+                if LotteryType(d["lottery_type"]) != lottery_type
+            ]
+            removed = before - len(self._data["draw_history"])
+        if removed:
+            self._flush()
+        return removed
+
     def get_draws(self, lottery_type: LotteryType | None = None) -> List[DrawResult]:
         draws = [DrawResult.from_dict(d) for d in self._data.get("draw_history", [])]
         if lottery_type:
             draws = [d for d in draws if d.lottery_type == lottery_type]
         return draws
+
+    def draw_count(self, lottery_type: LotteryType | None = None) -> int:
+        draws = self._data.get("draw_history", [])
+        if lottery_type:
+            return sum(1 for d in draws if d.get("lottery_type") == lottery_type.value)
+        return len(draws)

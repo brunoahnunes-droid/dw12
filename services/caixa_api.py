@@ -97,6 +97,27 @@ def fetch_contest(lt_name: str, contest: int | str) -> Optional[dict]:
     return _fetch(lt_name, contest)
 
 
+def fetch_all_historical(lt_name: str) -> Optional[list]:
+    """Fetch ALL historical draws from community API /api/{slug}/all.
+    Returns a list of raw dicts or None on failure. May take 1-3 minutes.
+    """
+    slug = SLUGS.get(lt_name)
+    if not slug:
+        return None
+    url = f"{_COMMUNITY}/{slug}/all"
+    try:
+        r = requests.get(url, headers=_HEADERS, timeout=180, verify=True)
+        r.raise_for_status()
+        data = r.json()
+        if isinstance(data, list):
+            for item in data:
+                item["_source"] = "community"
+            return data
+        return None
+    except Exception:
+        return None
+
+
 # ── parsing ────────────────────────────────────────────────────────────────
 
 def _parse_nums(raw) -> list[int]:

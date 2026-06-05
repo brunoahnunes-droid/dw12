@@ -17,8 +17,12 @@ from services.excel_export import export_check_results, export_generated_games
 from services.generator import generate_games
 from services.probability import (calculate_prize_probabilities,
                                    odds_string, overall_win_probability)
+from functools import wraps
+
 from storage.store import Store
 from storage.pool_store import Pool, PoolStore
+from storage.model_store import ModelStore
+from storage.auth_store import AuthStore
 
 EXPORTS_DIR = os.path.join(os.path.dirname(__file__), "exports")
 
@@ -27,8 +31,21 @@ app = Flask(__name__,
             static_folder=os.path.join(os.path.dirname(__file__), "static"))
 app.secret_key = "loterias-caixa-2026"
 
-store      = Store()
-pool_store = PoolStore()
+store       = Store()
+pool_store  = PoolStore()
+model_store = ModelStore()
+auth_store  = AuthStore()
+
+
+# ─── auth guard ──────────────────────────────────────────────────────────────
+
+@app.before_request
+def check_auth():
+    public = {"login", "logout", "static"}
+    if request.endpoint in public:
+        return None
+    if not session.get("user"):
+        return redirect(url_for("login", next=request.path))
 
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
@@ -111,10 +128,13 @@ def draw_extra_display(draw: DrawResult) -> str:
 
 
 def common_ctx():
+    user = session.get("user", {})
     return {
-        "lt_choices": lt_choices(),
-        "ticket_count": len(store.get_tickets()),
-        "pool_count": len(pool_store.get_all()),
+        "lt_choices":    lt_choices(),
+        "ticket_count":  len(store.get_tickets()),
+        "pool_count":    len(pool_store.get_all()),
+        "current_user":  user.get("username", ""),
+        "current_role":  user.get("role", "user"),
     }
 
 
@@ -228,7 +248,9 @@ def gerar():
         n_games = max(1, min(500, n_games))
 
         freq = None
-        if strategy != "random":
+        if strategy == "genetic" and model_store.has_model(lt):
+            freq = model_store.get_frequency(lt, mode="recency")
+        if freq is None and strategy != "random":
             from services.statistics import number_frequency
             freq = number_frequency(store.get_draws(), lt)
 
@@ -394,7 +416,8 @@ def conferir():
 
         elif action == "save_draw":
             store.save_draw(draw)
-            flash("Sorteio salvo no histórico.", "success")
+            model_store.update_incremental(draw)
+            flash("Sorteio salvo no histórico. Modelo atualizado.", "success")
 
         elif action == "check":
             tickets = store.get_tickets(lt)
@@ -453,23 +476,72 @@ def probabilidades():
                            **common_ctx())
 
 
+def _pagination_range(page: int, total_pages: int, window: int = 2) -> list:
+    """Return page numbers (ints) interspersed with -1 for ellipsis gaps."""
+    if total_pages <= 7:
+        return list(range(1, total_pages + 1))
+    pages: set = {1, total_pages}
+    for p in range(max(1, page - window), min(total_pages, page + window) + 1):
+        pages.add(p)
+    result = []
+    prev = 0
+    for p in sorted(pages):
+        if p - prev > 1:
+            result.append(-1)
+        result.append(p)
+        prev = p
+    return result
+
+
 @app.route("/historico")
 def historico():
-    draws = store.get_draws()
-    rows  = []
-    for d in reversed(draws):
+    filter_lt_name = request.args.get("lt", "").strip() or None
+    page     = max(1, int(request.args.get("page", 1) or 1))
+    per_page = 50
+
+    # Per-lottery summary (fast: raw dict count, no deserialization)
+    lt_summary = []
+    for lt, cfg in LOTTERY_CONFIGS.items():
+        lt_summary.append({
+            "name":  cfg.display_name,
+            "emoji": cfg.emoji,
+            "color": BRAND_HEX.get(lt, "#f5a623"),
+            "count": store.draw_count(lt),
+        })
+    total_draws   = store.draw_count()
+    lottery_count = sum(1 for s in lt_summary if s["count"] > 0)
+
+    filter_lt = resolve_lt(filter_lt_name) if filter_lt_name else None
+    all_draws = list(reversed(store.get_draws(filter_lt)))
+    filtered_count = len(all_draws)
+    total_pages = max(1, (filtered_count + per_page - 1) // per_page)
+    page = min(page, total_pages)
+
+    page_draws = all_draws[(page - 1) * per_page : page * per_page]
+    rows = []
+    for d in page_draws:
         cfg = LOTTERY_CONFIGS[d.lottery_type]
         rows.append({
-            "contest": d.contest_number,
-            "lt_name": cfg.display_name,
-            "emoji": cfg.emoji,
-            "date": d.draw_date,
+            "contest":        d.contest_number,
+            "lt_name":        cfg.display_name,
+            "emoji":          cfg.emoji,
+            "date":           d.draw_date,
             "numbers_sorted": sorted(d.numbers),
             "numbers2_sorted": sorted(d.numbers2) if d.numbers2 else None,
-            "extra_display": draw_extra_display(d),
+            "extra_display":  draw_extra_display(d),
         })
+
     return render_template("historico.html", active="historico",
-                           draws=rows, **common_ctx())
+                           draws=rows,
+                           lt_summary=lt_summary,
+                           total_draws=total_draws,
+                           filtered_count=filtered_count,
+                           filter_lt=filter_lt_name,
+                           page=page,
+                           total_pages=total_pages,
+                           page_range=_pagination_range(page, total_pages),
+                           lottery_count=lottery_count,
+                           **common_ctx())
 
 
 # ─── API: buscar resultado online ───────────────────────────────────────────
@@ -489,6 +561,21 @@ def api_resultado():
 
 
 # ─── Importar histórico ──────────────────────────────────────────────────────
+
+def _raw_to_draw_result(lt, lt_name, result):
+    """Convert a parsed API result dict into a DrawResult."""
+    extra = result.get("extra")
+    if lt_name == "+Milionária" and "trevos" in result:
+        extra = result["trevos"]
+    return DrawResult(
+        lottery_type=lt,
+        numbers=result["numbers"],
+        numbers2=result.get("numbers2"),
+        extra=extra,
+        contest_number=result.get("contest", ""),
+        draw_date=result.get("date", ""),
+    )
+
 
 @app.route("/historico/importar", methods=["POST"])
 def importar_historico():
@@ -524,26 +611,123 @@ def importar_historico():
         if not result:
             failed += 1
             continue
-
-        extra = result.get("extra")
-        if lt_name == "+Milionária" and "trevos" in result:
-            extra = result["trevos"]
-
-        store.save_draw(DrawResult(
-            lottery_type=lt,
-            numbers=result["numbers"],
-            numbers2=result.get("numbers2"),
-            extra=extra,
-            contest_number=result["contest"],
-            draw_date=result["date"],
-        ))
+        store.save_draw(_raw_to_draw_result(lt, lt_name, result))
         existing.add(s)
         imported += 1
+
+    if imported > 0:
+        model_store.rebuild(store.get_draws(lt), lt)
 
     msg = f"{imported} resultado(s) de {lt_name} importado(s)"
     if failed:
         msg += f" ({failed} não encontrado(s))"
+    if imported > 0:
+        msg += ". Modelo atualizado."
     flash(msg, "success" if imported else "warn")
+    return redirect(url_for("historico"))
+
+
+@app.route("/historico/importar_completo", methods=["POST"])
+def importar_historico_completo():
+    lt_name = request.form.get("lottery_type", "Mega-Sena")
+    lt      = resolve_lt(lt_name)
+
+    from services.caixa_api import fetch_all_historical, parse
+
+    raw_list = fetch_all_historical(lt_name)
+    if raw_list is None:
+        flash("API comunitária indisponível. Tente novamente mais tarde.", "error")
+        return redirect(url_for("historico"))
+
+    draws = []
+    for raw in raw_list:
+        result = parse(raw, lt_name)
+        if result and result.get("numbers"):
+            draws.append(_raw_to_draw_result(lt, lt_name, result))
+
+    if not draws:
+        flash("Nenhum sorteio obtido da API.", "warn")
+        return redirect(url_for("historico"))
+
+    added = store.save_draws_bulk(draws)
+    if added > 0:
+        model_store.rebuild(store.get_draws(lt), lt)
+
+    total = store.draw_count(lt)
+    msg = f"{added} sorteio(s) novo(s) de {lt_name} importados (total: {total})"
+    if added > 0:
+        msg += ". Modelo atualizado."
+    flash(msg, "success" if added else "warn")
+    return redirect(url_for("historico"))
+
+
+@app.route("/historico/upload_excel", methods=["POST"])
+def upload_excel_historico():
+    lt_name = request.form.get("lottery_type", "Mega-Sena")
+    lt      = resolve_lt(lt_name)
+
+    file = request.files.get("excel_file")
+    if not file or not file.filename:
+        flash("Nenhum arquivo enviado.", "error")
+        return redirect(url_for("historico"))
+    if not file.filename.lower().endswith((".xlsx", ".xls")):
+        flash("Formato inválido. Envie um arquivo .xlsx ou .xls.", "error")
+        return redirect(url_for("historico"))
+
+    import tempfile
+    from services.history_importer import parse_excel
+
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+        file.save(tmp.name)
+        tmp_path = tmp.name
+
+    try:
+        parsed = parse_excel(tmp_path, lt_name)
+    except Exception as exc:
+        flash(f"Erro ao processar Excel: {exc}", "error")
+        return redirect(url_for("historico"))
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    if not parsed:
+        flash("Nenhum sorteio encontrado no arquivo.", "warn")
+        return redirect(url_for("historico"))
+
+    draws = [
+        DrawResult(
+            lottery_type=lt,
+            numbers=r["numbers"],
+            numbers2=r.get("numbers2"),
+            extra=None,
+            contest_number=r.get("contest", ""),
+            draw_date=r.get("date", ""),
+        )
+        for r in parsed
+    ]
+
+    added = store.save_draws_bulk(draws)
+    if added > 0:
+        model_store.rebuild(store.get_draws(lt), lt)
+
+    total = store.draw_count(lt)
+    msg = f"{added} sorteio(s) novo(s) importados do Excel (total: {total})"
+    if added > 0:
+        msg += ". Modelo atualizado."
+    flash(msg, "success" if added else "warn")
+    return redirect(url_for("historico"))
+
+
+@app.route("/historico/limpar", methods=["POST"])
+def limpar_historico():
+    lt_name = request.form.get("lottery_type", "").strip()
+    lt      = resolve_lt(lt_name) if lt_name else None
+    removed = store.clear_draws(lt)
+    label   = lt_name or "todas as loterias"
+    flash(f"{removed} sorteio(s) de {label} removidos do histórico.",
+          "success" if removed else "warn")
     return redirect(url_for("historico"))
 
 
@@ -1010,6 +1194,141 @@ def bolao_conferir(pool_id):
                            teams=TIMEMANIA_TEAMS,
                            months=DIA_DE_SORTE_MONTHS,
                            **common_ctx())
+
+
+# ─── auth routes ─────────────────────────────────────────────────────────────
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if session.get("user"):
+        return redirect(url_for("index"))
+    error = None
+    username = ""
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        if auth_store.authenticate(username, password):
+            session["user"] = auth_store.get_user(username)
+            flash(f"Bem-vindo, {username}!", "success")
+            next_url = request.args.get("next") or url_for("index")
+            return redirect(next_url)
+        error = "Usuário ou senha inválidos."
+    return render_template("login.html", error=error, username=username)
+
+
+@app.route("/logout")
+def logout():
+    session.pop("user", None)
+    flash("Sessão encerrada.", "info")
+    return redirect(url_for("login"))
+
+
+@app.route("/senha", methods=["GET", "POST"])
+def senha():
+    user = session.get("user", {})
+    username = user.get("username", "")
+    if request.method == "POST":
+        old_pw   = request.form.get("old_password", "")
+        new_pw   = request.form.get("new_password", "")
+        confirm  = request.form.get("confirm_password", "")
+        if not new_pw or len(new_pw) < 6:
+            flash("A nova senha deve ter pelo menos 6 caracteres.", "error")
+        elif new_pw != confirm:
+            flash("As senhas não coincidem.", "error")
+        elif auth_store.change_password(username, old_pw, new_pw):
+            flash("Senha alterada com sucesso!", "success")
+            return redirect(url_for("index"))
+        else:
+            flash("Senha atual incorreta.", "error")
+    ctx = common_ctx()
+    ctx["active"] = "senha"
+    return render_template("senha.html", **ctx)
+
+
+# ─── modelo ───────────────────────────────────────────────────────────────────
+
+@app.route("/modelo")
+def modelo():
+    lottery_data = []
+    for lt, cfg in LOTTERY_CONFIGS.items():
+        lottery_data.append({
+            "lt_name":     cfg.display_name,
+            "emoji":       cfg.emoji,
+            "color":       BRAND_HEX.get(lt, "#f5a623"),
+            "draws_count": len(store.get_draws(lt)),
+            "model":       model_store.info(lt),
+        })
+    trained = sum(1 for d in lottery_data if d["model"])
+    ctx = common_ctx()
+    ctx.update({
+        "active":           "modelo",
+        "lottery_data":     lottery_data,
+        "total_draws":      sum(d["draws_count"] for d in lottery_data),
+        "total_lotteries":  len(lottery_data),
+        "trained":          trained,
+    })
+    return render_template("modelo.html", **ctx)
+
+
+@app.route("/modelo/rebuild", methods=["POST"])
+def modelo_rebuild():
+    lt_name = request.form.get("lottery_type", "").strip()
+    if lt_name:
+        lt    = resolve_lt(lt_name)
+        draws = store.get_draws(lt)
+        if draws:
+            model_store.rebuild(draws, lt)
+            flash(f"Modelo de {lt_name} recalculado com {len(draws)} sorteios.", "success")
+        else:
+            flash(f"Nenhum sorteio de {lt_name} no histórico.", "warn")
+    else:
+        count = 0
+        for lt in LotteryType:
+            draws = store.get_draws(lt)
+            if draws:
+                model_store.rebuild(draws, lt)
+                count += 1
+        flash(f"{count} modelo(s) recalculado(s).", "success")
+    return redirect(url_for("modelo"))
+
+
+# ─── backtest ────────────────────────────────────────────────────────────────
+
+@app.route("/backtest", methods=["GET", "POST"])
+def backtest():
+    from services.backtester import run_backtest
+
+    selected_lt_name = (request.form.get("lottery_type") or
+                        request.args.get("lt") or "Mega-Sena")
+    lt  = resolve_lt(selected_lt_name)
+    cfg = LOTTERY_CONFIGS[lt]
+
+    all_tickets = store.get_tickets(lt)
+    draws       = store.get_draws(lt)
+    report      = None
+    selected_ids: list[str] = []
+
+    if request.method == "POST" and request.form.get("action") == "run":
+        selected_ids = request.form.getlist("ticket_ids")
+        sel = [t for t in all_tickets if t.id in selected_ids] if selected_ids else all_tickets
+        if not sel:
+            flash("Selecione ao menos um jogo.", "error")
+        elif not draws:
+            flash("Nenhum sorteio no histórico. Importe resultados primeiro (Histórico → Importar).", "warning")
+        else:
+            report = run_backtest(sel, draws)
+
+    ctx = common_ctx()
+    ctx.update({
+        "active": "backtest",
+        "selected_lt": cfg.display_name,
+        "cfg": cfg_context(lt),
+        "all_tickets": all_tickets,
+        "selected_ids": selected_ids,
+        "draws_count": len(draws),
+        "report": report,
+    })
+    return render_template("backtest.html", **ctx)
 
 
 # ─── run ─────────────────────────────────────────────────────────────────────
