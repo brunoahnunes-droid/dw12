@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+{% block title %}Comparador Histórico · Mega do Carlão{% endblock %}
+{% block page_title %}Comparador Histórico{% endblock %}
+{% block page_sub %}Simule seus jogos em sorteios passados e veja quantos acertos você teria tido{% endblock %}
+
+{% block content %}
+<div class="page-cols-wide">
+
+  <!-- ── Configuração ── -->
+  <div>
+    <div class="card">
+      <div class="card-title">Configurar Simulação</div>
+      <form method="POST" id="bt-form">
+        <input type="hidden" name="action" value="run">
+
+        <div class="form-group">
+          <label class="form-label">Tipo de Jogo</label>
+          <select class="form-control" name="lottery_type" onchange="this.form.submit()">
+            {% for lt_val, lt_label in lt_choices %}
+              <option value="{{ lt_val }}" {% if lt_val == selected_lt %}selected{% endif %}>
+                {{ lt_label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            Jogos para simular
+            <span class="text-muted text-sm">({{ all_tickets|length }} disponíveis)</span>
+          </label>
+
+          {% if all_tickets %}
+          <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="toggleAll(true)">Todos</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="toggleAll(false)">Nenhum</button>
+          </div>
+          <div class="table-wrap" style="max-height:300px; overflow-y:auto; border-radius:6px;">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:32px;"></th>
+                  <th>ID</th>
+                  <th>Números</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for t in all_tickets %}
+                <tr style="cursor:pointer;" onclick="toggleCb('cb-{{ t.id }}')">
+                  <td><input type="checkbox" id="cb-{{ t.id }}" name="ticket_ids" value="{{ t.id }}"
+                             {% if not selected_ids or t.id in selected_ids %}checked{% endif %}
+                             onclick="event.stopPropagation()"></td>
+                  <td class="col-id">{{ t.id }}</td>
+                  <td>
+                    <div class="balls">
+                      {% for n in t.numbers %}
+                        <span class="ball ball-sm ticket">{{ "%02d"|format(n) }}</span>
+                      {% endfor %}
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="empty-state" style="padding:24px 0;">
+            <div class="icon">📋</div>
+            <p>Nenhum jogo de {{ selected_lt }}.<br>
+              <a href="{{ url_for('gerar') }}">Gerar jogos</a> ou
+              <a href="{{ url_for('adicionar') }}">adicionar manualmente</a>.
+            </p>
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Histórico disponível</label>
+          <div style="padding:10px 12px; background:var(--elevated); border-radius:6px;
+                      border:1px solid var(--border); display:flex; align-items:center; gap:8px;">
+            <span style="font-size:20px;">🕐</span>
+            <div>
+              <div style="font-weight:600;">{{ draws_count }} sorteios de {{ selected_lt }}</div>
+              {% if draws_count == 0 %}
+              <div class="text-muted text-sm">
+                Nenhum sorteio importado.
+                <a href="{{ url_for('historico') }}">→ Importar histórico</a>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg w-full"
+                {% if not all_tickets or draws_count == 0 %}disabled title="Adicione jogos e importe o histórico primeiro"{% endif %}>
+          📊 &nbsp; SIMULAR HISTÓRICO
+        </button>
+      </form>
+    </div>
+
+    {% if report %}
+    <!-- Dica sobre prêmios variáveis -->
+    <div class="card" style="border-color:var(--warn); margin-top:0;">
+      <span style="color:var(--warn);">⚠️</span>
+      <strong>Prêmios variáveis</strong> (sena, quina…) dependem do acúmulo e do rateio —
+      os valores reais não são calculados aqui. Apenas prêmios fixos são somados no ROI.
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Resultados ── -->
+  <div>
+    {% if report %}
+
+    <!-- Stats resumo -->
+    <div class="grid-4 mb-16">
+      <div class="stat-card">
+        <div class="stat-label">Sorteios testados</div>
+        <div class="stat-value">{{ report.total_draws }}</div>
+        <div class="stat-sub">{{ report.tickets|length }} jogo(s)</div>
+      </div>
+
+      {% set bo = report.best_overall %}
+      <div class="stat-card {% if bo and bo.matches >= 4 %}success{% endif %}">
+        <div class="stat-label">Melhor resultado</div>
+        <div class="stat-value">
+          {{ bo.matches if bo else 0 }}
+          <span style="font-size:16px; font-weight:400;">pts</span>
+        </div>
+        <div class="stat-sub">
+          {% if bo and bo.draw.contest_number %}concurso {{ bo.draw.contest_number }}
+          {% else %}—{% endif %}
+        </div>
+      </div>
+
+      <div class="stat-card danger">
+        <div class="stat-label">Total investido</div>
+        <div class="stat-value" style="font-size:18px;">R$&nbsp;{{ "%.0f"|format(report.total_cost) }}</div>
+        <div class="stat-sub">R$ {{ "%.2f"|format(report.total_cost) }}</div>
+      </div>
+
+      <div class="stat-card {% if report.roi >= 50 %}success{% endif %}">
+        <div class="stat-label">ROI (fixos)</div>
+        <div class="stat-value" style="font-size:20px;
+             color:{{ 'var(--success)' if report.roi >= 0 else 'var(--danger)' }};">
+          {{ "%.1f"|format(report.roi) }}%
+        </div>
+        <div class="stat-sub">
+          R$ {{ "%+.2f"|format(report.net) }} líquido
+        </div>
+      </div>
+    </div>
+
+    <!-- Distribuição de acertos -->
+    <div class="card mb-16">
+      <div class="card-title">Distribuição de Acertos</div>
+      {% set te = report.total_events %}
+      {% for matches, count in report.match_distribution.items() %}
+      {% set pct = (count / te * 100) if te > 0 else 0 %}
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+        <span class="badge
+              {% if matches >= 5 %}badge-gold
+              {% elif matches >= 4 %}badge-green
+              {% elif matches >= 3 %}badge-blue
+              {% else %}badge-gray{% endif %}"
+              style="min-width:34px; text-align:center; font-size:14px;">
+          {{ matches }}
+        </span>
+        <div style="flex:1; background:var(--border); border-radius:4px; height:14px; overflow:hidden;">
+          <div style="width:{{ pct | round(1) }}%; height:100%; border-radius:4px;
+                      background:{% if matches >= 5 %}#f5a623{% elif matches >= 4 %}var(--success){% elif matches >= 3 %}var(--info){% else %}var(--muted){% endif %};
+                      transition:width .4s ease;"></div>
+        </div>
+        <span class="text-muted text-sm" style="min-width:90px; text-align:right;">
+          {{ count }}× &nbsp;({{ "%.1f"|format(pct) }}%)
+        </span>
+      </div>
+      {% endfor %}
+      <div class="text-muted text-sm" style="margin-top:6px;">
+        {{ report.draws_with_prize }} sorteio(s) com algum prêmio em {{ report.total_draws }} testados.
+      </div>
+    </div>
+
+    <!-- Tabela por sorteio -->
+    <div class="card" style="padding:0;">
+      <div class="table-wrap" style="border:none; border-radius:var(--radius);
+                                     max-height:520px; overflow-y:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Concurso</th>
+              <th>Data</th>
+              <th>Números Sorteados</th>
+              <th>Acertos</th>
+              <th>Melhor Prêmio</th>
+              <th style="text-align:right;">Recebido</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in report.rows %}
+            {% set br = row.best_result %}
+            <tr class="{{ 'winner' if row.winners > 0 or row.has_variable_prize }}">
+              <td class="col-id">{{ row.draw.contest_number or '—' }}</td>
+              <td class="text-muted text-sm" style="white-space:nowrap;">
+                {{ row.draw.draw_date or '—' }}
+              </td>
+              <td>
+                <div class="balls">
+                  {% for n in row.draw.numbers|sort %}
+                    <span class="ball ball-sm
+                          {% if br and n in br.matched_numbers %}matched
+                          {% else %}drawn{% endif %}">
+                      {{ "%02d"|format(n) }}
+                    </span>
+                  {% endfor %}
+                </div>
+              </td>
+              <td>
+                {% set m = br.matches if br else 0 %}
+                <span class="badge
+                      {% if m >= 5 %}badge-gold
+                      {% elif m >= 4 %}badge-green
+                      {% elif m >= 3 %}badge-blue
+                      {% else %}badge-gray{% endif %}">
+                  {{ m }} pts
+                </span>
+                {% if report.tickets|length > 1 %}
+                  <span class="text-muted text-sm">/{{ report.tickets|length }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% set prize = br.best_prize if br else none %}
+                {% if prize %}
+                  <span class="badge
+                        {{ 'badge-gold' if prize.prize_type=='jackpot'
+                           else ('badge-green' if prize.prize_type=='fixed'
+                           else 'badge-blue') }}">
+                    {{ '🏆' if prize.prize_type=='jackpot' else ('💵' if prize.prize_type=='fixed' else '🥈') }}
+                    {{ prize.name }}
+                  </span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td style="text-align:right; white-space:nowrap;">
+                {% if row.fixed_prize_total > 0 %}
+                  <span style="color:var(--success); font-weight:600;">
+                    R$ {{ "%.2f"|format(row.fixed_prize_total) }}
+                  </span>
+                {% elif row.has_variable_prize %}
+                  <span class="badge badge-gold">variável</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% else %}
+    <!-- Empty state -->
+    <div class="card" style="height:440px; display:flex; align-items:center; justify-content:center;">
+      <div class="empty-state">
+        <div class="icon">📊</div>
+        <p>
+          Selecione seus jogos à esquerda e clique em<br>
+          <strong>📊 SIMULAR HISTÓRICO</strong><br>
+          para ver quantos acertos você teria tido<br>
+          em cada sorteio passado.
+        </p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleAll(check) {
+  document.querySelectorAll('[name=ticket_ids]').forEach(cb => cb.checked = check);
+}
+function toggleCb(id) {
+  const cb = document.getElementById(id);
+  if (cb) cb.checked = !cb.checked;
+}
+</script>
+{% endblock %}

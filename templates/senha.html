@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Alterar Senha · Mega do Carlão{% endblock %}
+{% block page_title %}Alterar Senha{% endblock %}
+{% block page_sub %}Altere sua senha de acesso ao sistema{% endblock %}
+
+{% block content %}
+<div style="max-width:480px; margin:0 auto;">
+  <div class="card">
+    <div class="card-title">Usuário: {{ current_user }}</div>
+    <form method="POST" data-no-load>
+      <div class="form-group">
+        <label class="form-label">Senha Atual</label>
+        <input class="form-control" type="password" name="old_password"
+               placeholder="••••••••" autocomplete="current-password" autofocus>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nova Senha</label>
+        <input class="form-control" type="password" name="new_password"
+               id="new_pw" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirmar Nova Senha</label>
+        <input class="form-control" type="password" name="confirm_password"
+               id="confirm_pw" placeholder="••••••••" autocomplete="new-password"
+               oninput="checkMatch()">
+        <div id="match-hint" class="text-sm" style="margin-top:4px;"></div>
+      </div>
+      <button type="submit" id="submit-btn" class="btn btn-primary btn-lg w-full">
+        🔑 &nbsp; ALTERAR SENHA
+      </button>
+    </form>
+  </div>
+
+  <div class="card" style="border-color:var(--warn);">
+    <div class="card-title">Dicas de segurança</div>
+    <ul style="font-size:13px; color:var(--muted); line-height:2; padding-left:18px;">
+      <li>Use pelo menos 8 caracteres</li>
+      <li>Combine letras, números e símbolos</li>
+      <li>Não compartilhe sua senha</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function checkMatch() {
+  const np = document.getElementById('new_pw').value;
+  const cp = document.getElementById('confirm_pw').value;
+  const hint = document.getElementById('match-hint');
+  const btn  = document.getElementById('submit-btn');
+  if (!cp) { hint.textContent = ''; return; }
+  if (np === cp) {
+    hint.textContent = '✅ Senhas coincidem';
+    hint.style.color = 'var(--success)';
+    btn.disabled = false;
+  } else {
+    hint.textContent = '❌ Senhas não coincidem';
+    hint.style.color = 'var(--danger)';
+    btn.disabled = true;
+  }
+}
+</script>
+{% endblock %}

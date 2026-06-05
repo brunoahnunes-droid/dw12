@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Modelo IA · Mega do Carlão{% endblock %}
+{% block page_title %}Modelo de Aprendizado{% endblock %}
+{% block page_sub %}O sistema aprende com o histórico e melhora a estratégia Genética ao longo do tempo{% endblock %}
+
+{% block content %}
+
+<!-- Resumo global -->
+<div class="grid-4 mb-16">
+  <div class="stat-card">
+    <div class="stat-label">Loterias aprendidas</div>
+    <div class="stat-value">{{ trained }}</div>
+    <div class="stat-sub">de {{ total_lotteries }} disponíveis</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total de sorteios</div>
+    <div class="stat-value">{{ total_draws }}</div>
+    <div class="stat-sub">processados</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Dados salvos em</div>
+    <div class="stat-value" style="font-size:13px; word-break:break-all;">model.json</div>
+    <div class="stat-sub">data/model.json</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Estratégia aprimorada</div>
+    <div class="stat-value" style="font-size:14px;">🧬 Genético</div>
+    <div class="stat-sub">usa pesos por recência</div>
+  </div>
+</div>
+
+<!-- Como funciona -->
+<div class="card mb-16" style="border-color:var(--info);">
+  <div class="card-title">Como o aprendizado funciona</div>
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; font-size:13px;">
+    <div style="padding:12px; background:var(--elevated); border-radius:8px;">
+      <div style="font-size:20px; margin-bottom:6px;">📥</div>
+      <strong>1. Importar histórico</strong>
+      <div class="text-muted" style="margin-top:4px;">
+        Vá em Histórico → Importar. Quanto mais sorteios, mais preciso o modelo.
+      </div>
+    </div>
+    <div style="padding:12px; background:var(--elevated); border-radius:8px;">
+      <div style="font-size:20px; margin-bottom:6px;">🧮</div>
+      <strong>2. Modelo aprende</strong>
+      <div class="text-muted" style="margin-top:4px;">
+        Frequências são calculadas com <em>decay exponencial</em>
+        — sorteios recentes pesam mais do que antigos.
+      </div>
+    </div>
+    <div style="padding:12px; background:var(--elevated); border-radius:8px;">
+      <div style="font-size:20px; margin-bottom:6px;">🎲</div>
+      <strong>3. Gerar jogos 🧬</strong>
+      <div class="text-muted" style="margin-top:4px;">
+        A estratégia Genética usa os pesos do modelo para gerar
+        combinações estatisticamente melhores.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recalcular tudo -->
+<div class="card mb-16" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+  <div style="flex:1;">
+    <div style="font-weight:600;">Recalcular todos os modelos</div>
+    <div class="text-muted text-sm">Reconstrói a partir do histórico completo salvo localmente.</div>
+  </div>
+  <form method="POST" action="{{ url_for('modelo_rebuild') }}">
+    <button type="submit" class="btn btn-primary">🔄 Recalcular Tudo</button>
+  </form>
+</div>
+
+<!-- Por loteria -->
+<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+  {% for lt in lottery_data %}
+  <div class="card" style="border-top:3px solid {{ lt.color }};">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+      <span style="font-size:22px;">{{ lt.emoji }}</span>
+      <span style="font-weight:600;">{{ lt.lt_name }}</span>
+    </div>
+
+    {% if lt.model %}
+    <div class="grid-2" style="gap:10px; margin-bottom:12px;">
+      <div style="background:var(--elevated); padding:10px; border-radius:6px;">
+        <div class="text-muted" style="font-size:10px; text-transform:uppercase; letter-spacing:.5px;">Aprendidos</div>
+        <div style="font-size:20px; font-weight:700; color:var(--accent);">
+          {{ lt.model.draws_processed }}
+        </div>
+        <div class="text-muted text-sm">sorteios</div>
+      </div>
+      <div style="background:var(--elevated); padding:10px; border-radius:6px;">
+        <div class="text-muted" style="font-size:10px; text-transform:uppercase; letter-spacing:.5px;">Histórico</div>
+        <div style="font-size:20px; font-weight:700;">{{ lt.draws_count }}</div>
+        <div class="text-muted text-sm">salvos</div>
+      </div>
+    </div>
+    <div class="text-muted text-sm" style="margin-bottom:4px;">
+      Último: concurso <strong>{{ lt.model.last_contest }}</strong>
+    </div>
+    <div class="text-muted text-sm" style="margin-bottom:12px;">
+      Atualizado: {{ lt.model.last_updated }}
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding:20px 0; text-align:center;">
+      <div style="font-size:28px; margin-bottom:6px;">📭</div>
+      <div class="text-muted text-sm">
+        {% if lt.draws_count > 0 %}
+          {{ lt.draws_count }} sorteio(s) no histórico.<br>Clique em Recalcular.
+        {% else %}
+          Sem histórico importado.
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('modelo_rebuild') }}">
+      <input type="hidden" name="lottery_type" value="{{ lt.lt_name }}">
+      <button type="submit" class="btn btn-ghost w-full btn-sm"
+              {% if lt.draws_count == 0 %}disabled{% endif %}>
+        🔄 Recalcular {{ lt.lt_name }}
+      </button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+
+{% endblock %}
