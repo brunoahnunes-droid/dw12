@@ -9,6 +9,7 @@ venv/
 # Dados gerados pelo app (não versionar apostas pessoais)
 data/jogos.json
 data/boloes.json
+data/users.json
 exports/*.xlsx
 
 # Editor / OS
