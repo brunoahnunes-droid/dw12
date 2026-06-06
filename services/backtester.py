@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from models.lottery_types import LOTTERY_CONFIGS, LotteryType
+from models.lottery_types import LotteryType
 from models.ticket import DrawResult, Ticket
 from services.checker import CheckResult, check_ticket
 
@@ -61,8 +61,8 @@ class BacktestReport:
 
     @property
     def total_cost(self) -> float:
-        cfg = LOTTERY_CONFIGS[self.lottery_type]
-        return len(self.tickets) * len(self.rows) * cfg.ticket_price
+        per_round = sum(t.cost() for t in self.tickets)
+        return per_round * len(self.rows)
 
     @property
     def total_fixed_prizes(self) -> float:

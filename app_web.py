@@ -173,7 +173,7 @@ def _build_check_results(raw_results, draw: DrawResult, cfg):
         })
 
     winners = [r for r in raw_results if r.is_winner]
-    spent = len(raw_results) * cfg.ticket_price
+    spent = sum(r.ticket.cost() for r in raw_results)
     fixed_ret = sum(
         p.fixed_value
         for r in winners
@@ -205,7 +205,8 @@ def index():
     for lt, cfg in LOTTERY_CONFIGS.items():
         ts = [t for t in tickets if t.lottery_type == lt]
         if ts:
-            by_type.append((cfg.display_name, len(ts), cfg.emoji, cfg.ticket_price))
+            invested = sum(t.cost() for t in ts)
+            by_type.append((cfg.display_name, len(ts), cfg.emoji, invested))
 
     last_draw = None
     if draws:
@@ -278,10 +279,14 @@ def gerar():
             flash(f"Excel exportado: {os.path.basename(path)}", "success")
         return redirect(url_for("gerar", lt=selected_lt_name))
 
+    from models.lottery_types import bet_cost
+    unit_cost = bet_cost(cfg, max(cfg.min_picks, min(cfg.max_picks, n_picks)))
+
     return render_template("gerar.html", active="gerar",
                            selected_lt=selected_lt_name,
                            cfg=cfg_context(lt),
                            n_picks=n_picks, n_games=n_games,
+                           unit_cost=unit_cost,
                            strategy=strategy,
                            generated=generated,
                            **common_ctx())
@@ -1047,7 +1052,8 @@ def bolao_detalhe(pool_id):
     ]
 
     n_parts = max(len(pool.participants), 1)
-    total_cost = len(pool.ticket_ids) * cfg.ticket_price
+    total_cost = sum(all_tickets[tid].cost()
+                     for tid in pool.ticket_ids if tid in all_tickets)
     per_person = total_cost / n_parts
 
     return render_template("bolao_detalhe.html", active="bolao",
@@ -1172,7 +1178,8 @@ def bolao_conferir(pool_id):
                 "label": t.label,
             })
 
-    total_cost = len(pool.ticket_ids) * cfg.ticket_price
+    total_cost = sum(all_tickets[tid].cost()
+                     for tid in pool.ticket_ids if tid in all_tickets)
     pp = total_cost / n_parts
 
     fin_pool = dict(fin,

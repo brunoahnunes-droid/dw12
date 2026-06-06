@@ -15,6 +15,18 @@ class Ticket:
     label: str = ""
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%d/%m/%Y %H:%M"))
 
+    def cost(self) -> float:
+        """Valor real desta aposta (considera apostas múltiplas)."""
+        from .lottery_types import LOTTERY_CONFIGS, bet_cost
+        cfg = LOTTERY_CONFIGS[self.lottery_type]
+        if isinstance(self.extra, list):
+            n_extra = len(self.extra)
+        elif self.extra is not None:
+            n_extra = 1
+        else:
+            n_extra = 0
+        return bet_cost(cfg, len(self.numbers), n_extra)
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,

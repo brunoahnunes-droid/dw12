@@ -64,14 +64,14 @@
               <input class="form-control" type="number" name="n_picks"
                      id="n-picks" min="{{ cfg.min }}" max="{{ cfg.max }}"
                      value="{{ n_picks }}"
-                     oninput="updateCost('{{ cfg.price }}')">
+                     oninput="updateCost('{{ cfg.price }}', {{ cfg.draw_count }})">
             {% endif %}
           </div>
           <div class="form-group">
             <label class="form-label">Quantidade de jogos</label>
             <input class="form-control" type="number" name="n_games" id="n-games"
                    min="1" max="500" value="{{ n_games }}"
-                   oninput="updateCost('{{ cfg.price }}')">
+                   oninput="updateCost('{{ cfg.price }}', {{ cfg.draw_count }})">
           </div>
         </div>
 
@@ -112,8 +112,14 @@
         </div>
 
         <div id="cost-preview" class="text-accent font-bold" style="font-size:15px; margin-bottom:14px;">
-          💰 Investimento: R$ {{ "%.2f"|format(cfg.price * n_games) }}
+          💰 Investimento: R$ {{ "%.2f"|format(unit_cost * n_games) }}
         </div>
+        {% if not cfg.fixed %}
+        <div class="text-muted text-sm" style="margin:-8px 0 14px;">
+          Aposta com mais de {{ cfg.draw_count }} números é múltipla: o valor é
+          multiplicado pelo nº de combinações.
+        </div>
+        {% endif %}
 
         <button type="submit" name="action" value="generate" class="btn btn-primary w-full btn-lg">
           🎲 &nbsp; GERAR JOGOS

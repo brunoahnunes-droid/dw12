@@ -110,13 +110,25 @@ function onLotteryChange(selectEl, formId) {
 }
 
 /* ── Generator: update cost preview ─────────────────────────── */
-function updateCost(price) {
+function nCombinations(n, k) {
+  if (k < 0 || n < 0 || k > n) return 0;
+  if (k === 0 || k === n) return 1;
+  k = Math.min(k, n - k);
+  let c = 1;
+  for (let i = 0; i < k; i++) c = (c * (n - i)) / (i + 1);
+  return Math.round(c);
+}
+
+function updateCost(price, drawCount) {
   const gamesEl = document.getElementById('n-games');
   const picksEl = document.getElementById('n-picks');
   const costEl  = document.getElementById('cost-preview');
   if (!gamesEl || !costEl) return;
-  const g = parseInt(gamesEl.value) || 0;
-  const cost = g * parseFloat(price || 0);
+  const g     = parseInt(gamesEl.value) || 0;
+  const picks = picksEl ? (parseInt(picksEl.value) || drawCount) : drawCount;
+  const combos  = drawCount ? nCombinations(picks, drawCount) : 1;
+  const perGame = (combos || 1) * parseFloat(price || 0);
+  const cost    = g * perGame;
   costEl.textContent = `💰 Investimento: R$ ${cost.toFixed(2).replace('.', ',')}`;
 }
 

@@ -32,12 +32,12 @@
   <div class="card">
     <div class="card-title">Jogos por Loteria</div>
     {% if by_type %}
-      {% for lt_name, count, emoji, price in by_type %}
+      {% for lt_name, count, emoji, invested in by_type %}
       <div class="info-row">
         <span class="key">{{ emoji }} {{ lt_name }}</span>
         <span class="flex items-center gap-8">
           <span class="badge badge-gray">{{ count }} jogo{{ 's' if count != 1 }}</span>
-          <span class="text-muted text-sm">R$ {{ "%.2f"|format(count * price) }}</span>
+          <span class="text-muted text-sm">R$ {{ "%.2f"|format(invested) }}</span>
         </span>
       </div>
       {% endfor %}

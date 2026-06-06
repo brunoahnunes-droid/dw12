@@ -359,12 +359,12 @@ def _write_financial_sheet(ws: Worksheet, results: List[CheckResult],
 
     # ── Investimento
     n_games      = len(results)
-    total_spent  = n_games * ticket_price
+    total_spent  = sum(r.ticket.cost() for r in results)
 
     _sect(2, "💰  Investimento")
-    _label(3, 1, "Jogos realizados"); _value(3, 2, n_games)
-    _label(4, 1, "Valor por jogo");   _value(4, 2, f"R$ {ticket_price:.2f}")
-    _label(5, 1, "Total investido");  _value(5, 2, f"R$ {total_spent:.2f}", "B71C1C")
+    _label(3, 1, "Jogos realizados");      _value(3, 2, n_games)
+    _label(4, 1, "Preço da aposta simples"); _value(4, 2, f"R$ {ticket_price:.2f}")
+    _label(5, 1, "Total investido");       _value(5, 2, f"R$ {total_spent:.2f}", "B71C1C")
 
     # ── Resultado
     winners    = [r for r in results if r.is_winner]
@@ -443,7 +443,7 @@ def _write_summary_sheet(wb: openpyxl.Workbook, tickets: List[Ticket]):
 
     ws.cell(3, 1, "Tipo de Jogo").font  = Font(bold=True)
     ws.cell(3, 2, "Qtd. Jogos").font    = Font(bold=True)
-    ws.cell(3, 3, "Preço/Jogo").font    = Font(bold=True)
+    ws.cell(3, 3, "Preço base").font    = Font(bold=True)
     ws.cell(3, 4, "Total Investido").font = Font(bold=True)
 
     by_type: dict[LotteryType, list] = {}
@@ -453,7 +453,7 @@ def _write_summary_sheet(wb: openpyxl.Workbook, tickets: List[Ticket]):
     total_inv = 0.0
     for r, (lt, lt_tickets) in enumerate(by_type.items(), 4):
         cfg     = LOTTERY_CONFIGS[lt]
-        inv     = len(lt_tickets) * cfg.ticket_price
+        inv     = sum(t.cost() for t in lt_tickets)
         total_inv += inv
         color   = BRAND.get(lt, "333333")
         ws.cell(r, 1, f"{cfg.emoji} {cfg.display_name}").font = Font(color=color, bold=True)

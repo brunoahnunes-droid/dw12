@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 from enum import Enum
+from math import comb
 
 
 class LotteryType(Enum):
@@ -75,6 +76,33 @@ DIA_DE_SORTE_MONTHS: dict[int, str] = {
     5: "Maio",      6: "Junho",      7: "Julho",    8: "Agosto",
     9: "Setembro", 10: "Outubro",   11: "Novembro", 12: "Dezembro",
 }
+
+def bet_cost(cfg: LotteryConfig, num_picks: int, num_extra: int = 0) -> float:
+    """Custo real de uma única aposta, conforme as regras da Caixa.
+
+    A Caixa cobra o número de combinações de aposta simples contidas numa
+    aposta múltipla, multiplicado pelo preço da aposta mínima:
+
+        custo = C(num_picks, draw_count) × C(num_extra, extra_draw_count) × ticket_price
+
+    Exemplos:
+      - Mega-Sena com 6 números → C(6,6)=1 → R$ 5,00
+      - Mega-Sena com 8 números → C(8,6)=28 → R$ 140,00
+      - +Milionária 6 números + 3 trevos → C(6,6)·C(3,2)=3 → R$ 18,00
+
+    Jogos de pick fixo (Lotomania, Timemania) e o Super Sete (posicional,
+    1 dígito por coluna no nosso modelo) sempre custam o preço base.
+    """
+    if cfg.fixed_picks or cfg.is_positional or num_picks <= cfg.draw_count:
+        # Jogos de pick fixo (Lotomania marca 50/sorteia 20, Timemania 10/7) e
+        # o Super Sete (posicional) são sempre aposta simples.
+        combos = 1
+    else:
+        combos = comb(num_picks, cfg.draw_count)
+    if cfg.extra_draw_count and num_extra > cfg.extra_draw_count:
+        combos *= comb(num_extra, cfg.extra_draw_count)
+    return combos * cfg.ticket_price
+
 
 LOTTERY_CONFIGS: dict[LotteryType, LotteryConfig] = {
 
