@@ -97,25 +97,36 @@ def fetch_contest(lt_name: str, contest: int | str) -> Optional[dict]:
     return _fetch(lt_name, contest)
 
 
-def fetch_all_historical(lt_name: str) -> Optional[list]:
+def fetch_all_historical(lt_name: str, attempts: int = 3) -> Optional[list]:
     """Fetch ALL historical draws from community API /api/{slug}/all.
     Returns a list of raw dicts or None on failure. May take 1-3 minutes.
+
+    The community API runs on a free dyno that can be cold (first request
+    fails or 503s, then wakes up), so we retry a few times. Connect timeout
+    is short; read timeout is generous because the /all payload is large.
     """
+    import time
+
     slug = SLUGS.get(lt_name)
     if not slug:
         return None
     url = f"{_COMMUNITY}/{slug}/all"
-    try:
-        r = requests.get(url, headers=_HEADERS, timeout=180, verify=True)
-        r.raise_for_status()
-        data = r.json()
-        if isinstance(data, list):
-            for item in data:
-                item["_source"] = "community"
-            return data
-        return None
-    except Exception:
-        return None
+    for attempt in range(attempts):
+        try:
+            r = requests.get(url, headers=_HEADERS,
+                             timeout=(15, 240), verify=True)
+            r.raise_for_status()
+            data = r.json()
+            if isinstance(data, list) and data:
+                for item in data:
+                    item["_source"] = "community"
+                return data
+            # empty/invalid body — retry in case the dyno was waking up
+        except Exception:
+            pass
+        if attempt < attempts - 1:
+            time.sleep(3)   # give a cold dyno a moment to wake
+    return None
 
 
 # ── parsing ────────────────────────────────────────────────────────────────
