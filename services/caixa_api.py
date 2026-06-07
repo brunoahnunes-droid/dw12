@@ -98,32 +98,36 @@ def fetch_contest(lt_name: str, contest: int | str) -> Optional[dict]:
 
 
 def fetch_all_historical(lt_name: str, attempts: int = 3) -> Optional[list]:
-    """Fetch ALL historical draws from community API /api/{slug}/all.
-    Returns a list of raw dicts or None on failure. May take 1-3 minutes.
+    """Fetch ALL historical draws from the community API.
+    Returns a list of raw dicts or None on failure.
 
-    The community API runs on a free dyno that can be cold (first request
-    fails or 503s, then wakes up), so we retry a few times. Connect timeout
-    is short; read timeout is generous because the /all payload is large.
+    The base endpoint /api/{slug} already returns the FULL history as a JSON
+    array (newest first). The /api/{slug}/all route was deprecated and now
+    returns HTTP 400, so we hit the base endpoint and keep /all only as a
+    fallback. The free dyno can be cold (first request 503s then wakes up),
+    so we retry; the read timeout is generous because the payload is large
+    (~2-3 MB for Mega-Sena).
     """
     import time
 
     slug = SLUGS.get(lt_name)
     if not slug:
         return None
-    url = f"{_COMMUNITY}/{slug}/all"
+    urls = [f"{_COMMUNITY}/{slug}", f"{_COMMUNITY}/{slug}/all"]
     for attempt in range(attempts):
-        try:
-            r = requests.get(url, headers=_HEADERS,
-                             timeout=(15, 240), verify=True)
-            r.raise_for_status()
-            data = r.json()
-            if isinstance(data, list) and data:
-                for item in data:
-                    item["_source"] = "community"
-                return data
-            # empty/invalid body — retry in case the dyno was waking up
-        except Exception:
-            pass
+        for url in urls:
+            try:
+                r = requests.get(url, headers=_HEADERS,
+                                 timeout=(15, 240), verify=True)
+                r.raise_for_status()
+                data = r.json()
+                if isinstance(data, list) and data:
+                    for item in data:
+                        item["_source"] = "community"
+                    return data
+                # single object means this isn't the full-history endpoint
+            except Exception:
+                pass
         if attempt < attempts - 1:
             time.sleep(3)   # give a cold dyno a moment to wake
     return None
