@@ -26,8 +26,11 @@
   <div id="loading-msg" style="color:var(--muted);font-size:13px;">Aguarde…</div>
 </div>
 
+<!-- Sidebar backdrop (mobile) -->
+<div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
 <!-- Sidebar -->
-<aside class="sidebar">
+<aside class="sidebar" id="sidebar">
   <div class="sidebar-logo">
     <span class="logo-icon">🎰</span>
     <div class="logo-title">Mega do Carlão</div>
@@ -92,6 +95,9 @@
 <!-- Main -->
 <main class="main">
   <div class="topbar">
+    <button class="hamburger" id="hamburger" onclick="toggleSidebar()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
     <div>
       <div class="topbar-title">{% block page_title %}{% endblock %}</div>
       <div class="topbar-sub">{% block page_sub %}{% endblock %}</div>

@@ -276,8 +276,78 @@ td { padding: 12px 14px; vertical-align: middle; }
        cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
 .tab.active { color: var(--accent); border-color: var(--accent); }
 
+/* ── Hamburger (mobile menu toggle) ──────────────────────────── */
+.hamburger {
+  display: none; flex-direction: column; justify-content: center; gap: 5px;
+  width: 40px; height: 40px; padding: 9px 8px; margin-right: 4px;
+  background: var(--elevated); border: 1px solid var(--border);
+  border-radius: 8px; cursor: pointer; flex-shrink: 0;
+}
+.hamburger span { display: block; height: 2px; width: 100%;
+  background: var(--text); border-radius: 2px; transition: all .2s ease; }
+
+/* ── Sidebar backdrop (mobile) ───────────────────────────────── */
+.sidebar-backdrop {
+  display: none; position: fixed; inset: 0; z-index: 800;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(2px);
+}
+.sidebar-backdrop.open { display: block; }
+
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .page-cols, .page-cols-wide { grid-template-columns: 1fr; }
   .grid-4 { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 768px) {
+  body { height: 100dvh; }
+
+  /* Off-canvas drawer */
+  .hamburger { display: flex; }
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 900;
+    width: 270px; min-width: 270px;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    box-shadow: var(--shadow);
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  .main { width: 100%; }
+
+  /* Tighter spacing */
+  .topbar { padding: 0 14px; height: 54px; gap: 10px; }
+  .topbar > div:not(.topbar-right) { min-width: 0; flex: 1; }
+  .topbar-title { font-size: 16px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .topbar-sub { font-size: 11px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .content { padding: 16px 14px; }
+  .card { padding: 16px; }
+
+  /* Collapse all multi-column layouts to a single column */
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .form-row, .form-row-3 { grid-template-columns: 1fr; }
+
+  /* Topbar actions wrap below the title if needed */
+  .topbar-right { gap: 6px; }
+  .topbar-right .btn { padding: 7px 12px; font-size: 12px; }
+
+  /* Stat values a touch smaller */
+  .stat-card .stat-value { font-size: 24px; }
+
+  /* Number picker fills the row evenly */
+  .num-grid { gap: 5px; padding: 12px; justify-content: space-between; }
+  .num-btn { width: 44px; height: 42px; }
+}
+
+@media (max-width: 400px) {
+  .grid-4 { grid-template-columns: 1fr 1fr; }
+  .num-btn { width: 40px; height: 40px; font-size: 12px; }
+  .ball { width: 30px; height: 30px; font-size: 11px; }
+}
+
+/* Never leave the drawer/backdrop stuck open on desktop widths */
+@media (min-width: 769px) {
+  .sidebar-backdrop { display: none !important; }
 }

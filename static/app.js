@@ -1,5 +1,21 @@
 'use strict';
 
+/* ── Mobile sidebar drawer ───────────────────────────────────── */
+function openSidebar() {
+  document.getElementById('sidebar')?.classList.add('open');
+  document.getElementById('sidebar-backdrop')?.classList.add('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar')?.classList.remove('open');
+  document.getElementById('sidebar-backdrop')?.classList.remove('open');
+}
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  if (sb && sb.classList.contains('open')) closeSidebar();
+  else openSidebar();
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSidebar(); });
+
 /* ── Toast notifications ─────────────────────────────────────── */
 function showToast(msg, type = 'success') {
   let container = document.getElementById('toast-container');
